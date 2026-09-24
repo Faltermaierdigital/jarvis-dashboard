@@ -42,6 +42,34 @@ export function buildDemo(agents) {
   for (const cfg of agents) {
     if (cfg.status === "planned") continue;
     runs[cfg.id] = [];
+    if (cfg.id === "sync") {
+      const t = new Date(now.getTime() - 40 * 60e3);
+      const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),
+        run_started_at: t.toISOString(), updated_at: new Date(t.getTime() + 20000).toISOString(), html_url: "#demo" };
+      runs[cfg.id].push(run);
+      const day = (d, hh, mm) => { const x = new Date(now); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); return x.toISOString(); };
+      const date = (d) => {
+        const x = new Date(now); x.setDate(x.getDate() + d);
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+      };
+      results[run.id] = {
+        agent: "sync", finished_at: run.updated_at, errors: [],
+        events: [
+          { title: "Zahnarzt", start: day(0, 17, 30), end: day(0, 18, 30), all_day: false, location: "Praxis Beispiel" },
+          { title: "Lieferant Weinhandel", start: day(1, 10, 0), end: day(1, 11, 0), all_day: false },
+          { title: "Tag der Deutschen Einheit", start: date(8), end: date(9), all_day: true, holiday: true },
+          { title: "Steuerberater", start: day(3, 14, 0), end: day(3, 15, 0), all_day: false },
+        ],
+        tasks: [
+          { id: "d1", content: "Angebot Großhändler nachfassen", project: "Inbox", priority: 4, due_date: date(-1), link: "#" },
+          { id: "d2", content: "Weinlieferung prüfen", project: "Zur Brezn", priority: 3, due_date: date(0), link: "#" },
+          { id: "d3", content: "Dienstplan freigeben", project: "Zur Brezn", priority: 1, due_date: `${date(0)}T15:00:00`, link: "#" },
+          { id: "d4", content: "Muster bei Lieferant bezahlen", project: "Shop", priority: 2, due_date: date(4), link: "#" },
+          { id: "d5", content: "Kühlhaus-Wartung anfragen", project: "Hotel", priority: 1, due_date: null, link: "#" },
+        ],
+      };
+      continue;
+    }
     if (cfg.input) {
       DIKTATE.forEach(([text, type, title, whenText, target, ok], i) => {
         const t = new Date(now.getTime() - (i * 19 + 2) * 3600e3);

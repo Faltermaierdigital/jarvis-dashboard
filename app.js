@@ -19,6 +19,7 @@ const state = {
   results: {},       // runId -> result.json
   resultErrors: [],
   pending: {},       // agentId -> timestamp des manuellen Starts
+  closing: {},       // Todoist-ID -> timestamp, Haken gesetzt, Abgleich laeuft
   ui: { run: null, account: "", kind: "" },
 };
 let timer = null;
@@ -91,7 +92,8 @@ const fTime = fmt({ hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const fShort = fmt({ day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const fDay = fmt({ day: "2-digit", month: "2-digit" });
 const fDayLong = fmt({ weekday: "short", day: "2-digit", month: "2-digit" });
-const fDayKey = fmt({ year: "numeric", month: "2-digit", day: "2-digit" });
+// ISO-Tag (YYYY-MM-DD) in Berliner Zeit, vergleichbar mit Todoist-/Kalenderdaten.
+const fDayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 const dayKey = (d) => fDayKey.format(d);
 function when(iso) {
   const d = new Date(iso);
@@ -149,6 +151,11 @@ async function load() {
     const newer = (state.runs[id] || []).some((r) => new Date(r.created_at) >= t - 15000);
     if (newer || Date.now() - t > 120000) delete state.pending[id];
   }
+  const snap = latestSnapshot();
+  for (const [id, t] of Object.entries(state.closing)) {
+    const fresh = snap && new Date(snap.finished_at) > t;
+    if ((fresh && !snap.tasks.some((x) => x.id === id)) || Date.now() - t > 180000) delete state.closing[id];
+  }
   render();
   schedule();
 }
@@ -157,7 +164,7 @@ async function loadResults(cfg) {
   const arts = await gh.listArtifacts(OWNER, cfg.repo, cfg.artifact);
   const todo = arts
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, RESULT_DAYS)
+    .slice(0, cfg.results || RESULT_DAYS)
     .filter((a) => a.workflow_run && !state.results[a.workflow_run.id]);
   await Promise.all(todo.map(async (a) => {
     try {
@@ -172,7 +179,7 @@ async function loadResults(cfg) {
 function schedule() {
   clearTimeout(timer);
   if (!state.connected) return;
-  const busy = Object.keys(state.pending).length > 0 ||
+  const busy = Object.keys(state.pending).length > 0 || Object.keys(state.closing).length > 0 ||
     Object.values(state.runs).some((runs) => runs[0] && runs[0].status !== "completed");
   timer = setTimeout(load, busy ? 8000 : 60000);
 }
@@ -185,11 +192,17 @@ function resultsFor(agentId) {
     .sort((a, b) => new Date(b.finished_at) - new Date(a.finished_at));
 }
 
+// Letzter planmaessiger Lauf, dessen Toleranzfenster schon abgelaufen ist.
 function lastExpected(cfg, now) {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), cfg.schedule.utcHour, cfg.schedule.utcMinute));
-  if (d > now) d.setUTCDate(d.getUTCDate() - 1);
-  if (now - d < cfg.graceHours * 3600e3) d.setUTCDate(d.getUTCDate() - 1);
-  return d;
+  const graceMs = (cfg.graceHours || 3) * 3600e3;
+  const hours = [...cfg.schedule.utcHours].sort((a, b) => b - a);
+  for (let back = 0; back < 3; back++) {
+    for (const hr of hours) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - back, hr, cfg.schedule.utcMinute));
+      if (now - d >= graceMs) return d;
+    }
+  }
+  return new Date(0);
 }
 
 function agentStatus(cfg) {
@@ -234,7 +247,7 @@ async function startAgent(cfg) {
     const text = await inputDialog(cfg.input);
     if (!text) return;
     inputs = { text, source: "dashboard" };
-  } else {
+  } else if (cfg.confirm !== false) {
     const ok = await confirmDialog(`${cfg.name} jetzt starten?`, cfg.confirm || "Der Agent wird sofort ausgeführt.", "Jetzt starten");
     if (!ok) return;
   }
@@ -251,7 +264,32 @@ async function startAgent(cfg) {
   }
 }
 
+// Haken im Planer: startet den Abgleich mit der Aufgaben-ID, der sie in
+// Todoist erledigt und danach Kalender und To-dos neu holt.
+async function closeTask(task) {
+  const cfg = AGENTS.find((a) => a.id === "sync");
+  if (!cfg || state.closing[task.id]) return;
+  state.closing[task.id] = Date.now();
+  render();
+  if (DEMO) { toast(`Demo-Modus: „${task.content}“ wurde nicht wirklich erledigt.`); return; }
+  try {
+    await gh.dispatch(OWNER, cfg.repo, cfg.workflow, cfg.ref || "main", { close_task_id: task.id });
+    toast(`„${task.content}“ wird in Todoist erledigt …`);
+    clearTimeout(timer);
+    timer = setTimeout(load, 8000);
+  } catch (e) {
+    delete state.closing[task.id];
+    render();
+    toast(`Abhaken fehlgeschlagen: ${e.message}`, true);
+  }
+}
+
+const TOKEN_KEY = "jarvis-dashboard-token";
+function storedToken() { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } }
+function storeToken(t) { try { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); } catch {} }
+
 function logout(message) {
+  storeToken(null);
   gh.setToken(null);
   clearTimeout(timer);
   Object.assign(state, { connected: false, runs: {}, results: {}, agentErrors: {}, resultErrors: [], pending: {}, error: null });
@@ -312,6 +350,7 @@ function renderLogin(message) {
       gh.setToken(t);
       try {
         await gh.checkAccess(OWNER, activeAgents()[0].repo);
+        storeToken(t);
         pw.value = "";
         state.connected = true;
         startApp();
@@ -333,7 +372,7 @@ function renderLogin(message) {
       h("h1", {}, "JARVIS"),
       h("p", {}, "Kontrollzentrum für alle Agents. Mit deinem GitHub-Token verbinden, der Passwortmanager füllt ihn aus."),
       form,
-      h("div", { class: "fine" }, "Der Token bleibt nur im Arbeitsspeicher dieses Tabs und ist beim Schließen weg. ",
+      h("div", { class: "fine" }, "Der Token bleibt nur in diesem Tab, auch beim Neuladen. Beim Schließen des Tabs ist er weg. ",
         h("a", { href: "?demo" }, "Demo ansehen")))));
   pw.focus();
 }
@@ -341,6 +380,7 @@ function renderLogin(message) {
 // ---------- App-Rahmen ----------
 const VIEWS = [
   { id: "uebersicht", label: "Übersicht", icon: "home", render: viewOverview },
+  { id: "planer", label: "Planer", icon: "calendar", render: viewPlaner },
   { id: "agents", label: "Agents", icon: "agents", render: viewAgents },
   { id: "mailfilter", label: "Mail-Filter", icon: "filter", render: viewMail },
   { id: "diktate", label: "Diktate", icon: "mic", render: viewDiktate },
@@ -382,12 +422,15 @@ function render() {
       h("header", { class: "topbar" },
         h("div", { class: "brand" }, h("h1", {}, "JARVIS KONTROLLZENTRUM"), h("p", {}, "Monitoring & Steuerung aller Agents")),
         h("div", { class: "top-right" },
-          h("span", { class: "pill-outline" }, DEMO ? "DEMO / BEISPIEL" : "FALTERMAIER"),
+          h("div", { class: "top-actions" },
+            h("button", { class: `btn ghost refresh${state.loading ? " spinning" : ""}`, title: "Daten neu laden", "aria-label": "Aktualisieren", onclick: () => { load(); render(); } },
+              icon("refresh"), h("span", { class: "refresh-label" }, "Aktualisieren")),
+            h("span", { class: "pill-outline" }, DEMO ? "DEMO / BEISPIEL" : "FALTERMAIER")),
           h("span", { class: "live-state" }, h("span", { class: `dot ${DEMO ? "amber" : liveDot}` }), liveText))),
       h("main", { class: "content" }, h("h1", { class: "page-title" }, view.label), body),
       h("footer", { class: "footer" }, h("div", { class: "line" },
         DEMO ? "Erfundene Beispieldaten · keine Verbindung zu GitHub" :
-          `Daten live von GitHub · Token nur im Arbeitsspeicher · aktualisiert automatisch${state.lastUpdate ? ` · zuletzt ${fTime.format(state.lastUpdate)}` : ""}`)))));
+          `Daten live von GitHub · Token nur in diesem Tab · aktualisiert automatisch${state.lastUpdate ? ` · zuletzt ${fTime.format(state.lastUpdate)}` : ""}`)))));
 }
 
 // ---------- Bausteine ----------
@@ -425,6 +468,7 @@ function activityEvents(limit) {
   const ev = [];
   for (const cfg of activeAgents()) {
     for (const r of state.runs[cfg.id] || []) {
+      if (cfg.quiet && r.event === "schedule" && r.conclusion === "success") continue;
       const trigger = r.event === "schedule" ? "Zeitplan" : r.event === "workflow_dispatch" ? "manuell" : r.event;
       ev.push({ t: new Date(r.run_started_at || r.created_at), color: "amber", text: `${cfg.name} gestartet (${trigger})`, url: r.html_url });
       if (r.status === "completed") {
@@ -608,6 +652,7 @@ function viewOverview() {
       statCard("zap", "violet", "Läufe · 7 Tage", String(runs7)),
       statCard("check", "green", "Erfolgsquote · 30 T.", totAll ? `${Math.round((okAll / totAll) * 100)} %` : "–"),
       statCard("inbox", "amber", "Werbung erkannt", lastRes ? String(lastRes.totals.candidates) : "–", lastRes ? "letzter Lauf" : "")),
+    h("div", { class: "row-3" }, eventsPanel(true), tasksPanel(true)),
     h("div", { class: "row-2" }, mailChart(), mailboxRing()),
     h("div", { class: "row-3" },
       h("div", { class: "panel" },
@@ -702,6 +747,119 @@ function viewMail() {
   ];
 }
 
+// ---------- Planer: Termine & To-dos ----------
+function latestSnapshot() {
+  return resultsFor("sync")[0] || null;
+}
+
+const fWeekday = fmt({ weekday: "long", day: "2-digit", month: "2-digit" });
+const fHM = fmt({ hour: "2-digit", minute: "2-digit" });
+function dayLabel(key) {
+  const today = dayKey(new Date());
+  const tomorrow = dayKey(new Date(Date.now() + 864e5));
+  if (key === today) return "Heute";
+  if (key === tomorrow) return "Morgen";
+  return fWeekday.format(new Date(`${key}T12:00:00`));
+}
+// Tages-Schluessel eines Termins in Berliner Zeit (ganztaegig: Datum direkt).
+function eventDayKey(ev) {
+  return ev.all_day ? ev.start.slice(0, 10) : dayKey(new Date(ev.start));
+}
+
+function snapshotHeader(snap, title, overview) {
+  const cfg = AGENTS.find((a) => a.id === "sync");
+  const running = cfg && agentStatus(cfg).key === "running";
+  return h("div", { class: "panel-head" }, h("h2", {}, title),
+    overview ? h("button", { class: "link", onclick: () => { location.hash = "/planer"; } }, "Planer", icon("arrow")) :
+      h("div", { class: "head-actions" },
+        h("span", { class: "muted small" }, snap ? `Stand ${fHM.format(new Date(snap.finished_at))}` : "noch kein Abgleich"),
+        cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("refresh"), running ? "Gleicht ab …" : "Jetzt abgleichen") : null));
+}
+
+function eventsPanel(overview) {
+  const snap = latestSnapshot();
+  const now = Date.now();
+  const sortKey = (e) => `${eventDayKey(e)} ${e.all_day ? "00:00" : fHM.format(new Date(e.start))}`;
+  let events = snap ? snap.events.filter((e) => new Date(e.all_day ? `${e.end}T00:00:00` : e.end) > now)
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b))) : [];
+  if (overview) events = events.slice(0, 5);
+  const groups = new Map();
+  for (const e of events) {
+    const k = eventDayKey(e);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(e);
+  }
+  const body = !snap ? h("div", { class: "empty" }, "Noch kein Abgleich gelaufen.") :
+    !events.length ? h("div", { class: "empty" }, "Keine Termine in den nächsten 14 Tagen.") :
+      [...groups].map(([k, list]) => h("div", { class: "day-group" },
+        h("div", { class: "day-label" }, dayLabel(k)),
+        list.map((e) => h("div", { class: `event${e.holiday ? " holiday" : ""}` },
+          h("span", { class: "event-time mono" }, e.all_day ? "ganztägig" : `${fHM.format(new Date(e.start))}–${fHM.format(new Date(e.end))}`),
+          h("span", { class: "event-title" },
+            e.link ? h("a", { href: e.link, target: "_blank", rel: "noopener noreferrer" }, e.title) : e.title,
+            e.location ? h("span", { class: "muted" }, ` · ${e.location}`) : null,
+            e.holiday ? h("span", { class: "tag c-green" }, "Feiertag") : null)))));
+  return h("div", { class: "panel" }, snapshotHeader(snap, overview ? "Nächste Termine" : "Termine · 14 Tage", overview), body);
+}
+
+const PRIO = { 4: "c-red", 3: "c-amber", 2: "c-cyan" };
+function taskRow(t) {
+  const closing = !!state.closing[t.id];
+  const due = t.due_date ? (t.due_date.length > 10 ? fShort.format(new Date(t.due_date)).replace(",", "") : fDay.format(new Date(`${t.due_date}T12:00:00`))) : "";
+  return h("div", { class: `task${closing ? " done" : ""}` },
+    h("button", { class: `check ${PRIO[t.priority] || ""}`, "aria-label": `„${t.content}“ erledigen`, disabled: closing, onclick: () => closeTask(t) },
+      closing ? icon("check") : null),
+    h("div", { class: "task-body" },
+      h("a", { class: "task-title", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.content),
+      h("div", { class: "task-meta muted" }, [t.project, due, t.recurring ? "wiederkehrend" : ""].filter(Boolean).join(" · "))));
+}
+
+function taskGroups(tasks) {
+  const today = dayKey(new Date());
+  const week = dayKey(new Date(Date.now() + 7 * 864e5));
+  const g = { overdue: [], today: [], week: [], later: [], none: [] };
+  for (const t of tasks) {
+    const d = t.due_date ? t.due_date.slice(0, 10) : null;
+    if (!d) g.none.push(t);
+    else if (d < today) g.overdue.push(t);
+    else if (d === today) g.today.push(t);
+    else if (d <= week) g.week.push(t);
+    else g.later.push(t);
+  }
+  const byDue = (a, b) => (a.due_date || "").localeCompare(b.due_date || "") || b.priority - a.priority;
+  Object.values(g).forEach((l) => l.sort(byDue));
+  return g;
+}
+
+function tasksPanel(overview) {
+  const snap = latestSnapshot();
+  const g = snap ? taskGroups(snap.tasks) : null;
+  const sections = overview
+    ? [["Überfällig", "overdue"], ["Heute", "today"]]
+    : [["Überfällig", "overdue"], ["Heute", "today"], ["Nächste 7 Tage", "week"], ["Später", "later"], ["Ohne Datum", "none"]];
+  let body;
+  if (!snap) body = h("div", { class: "empty" }, "Noch kein Abgleich gelaufen.");
+  else {
+    const parts = sections.filter(([, k]) => g[k].length).map(([label, k]) => h("div", { class: "day-group" },
+      h("div", { class: `day-label${k === "overdue" ? " c-red" : ""}` }, `${label} (${g[k].length})`),
+      g[k].map(taskRow)));
+    body = parts.length ? parts : h("div", { class: "empty" }, overview ? "Heute nichts fällig." : "Keine offenen Aufgaben.");
+  }
+  const title = overview ? `To-dos heute · ${snap ? g.today.length + g.overdue.length : "–"}` : `To-dos · ${snap ? snap.tasks.length : "–"} offen`;
+  return h("div", { class: "panel" }, snapshotHeader(snap, title, overview), body);
+}
+
+function viewPlaner() {
+  const snap = latestSnapshot();
+  const cfg = AGENTS.find((a) => a.id === "sync");
+  return [
+    cfg && state.agentErrors[cfg.id] ? h("div", { class: "notice err" }, state.agentErrors[cfg.id]) : null,
+    snap && snap.errors && snap.errors.length ? h("div", { class: "notice err" }, `Letzter Abgleich mit Fehlern: ${snap.errors.join(" · ")}`) : null,
+    h("div", { class: "row-3" }, eventsPanel(false), tasksPanel(false)),
+    h("p", { class: "muted small" }, "Abgleich alle 2 Stunden zwischen 6 und 22 Uhr oder per Knopf. Ein Haken erledigt die Aufgabe in Todoist, das dauert etwa 30 Sekunden. Termine, die in Google als privat markiert sind, erscheinen als „Beschäftigt“."),
+  ];
+}
+
 function viewDiktate() {
   const cfg = AGENTS.find((a) => a.id === "watchdiktat");
   const results = resultsFor("watchdiktat");
@@ -765,7 +923,7 @@ function viewSettings() {
       h("div", { class: "panel-head" }, h("h2", {}, "Verbindung")),
       h("dl", { class: "kv" },
         h("dt", {}, "GitHub-Konto"), h("dd", {}, OWNER),
-        h("dt", {}, "Token"), h("dd", {}, DEMO ? "Demo-Modus, kein Token" : "nur im Arbeitsspeicher dieses Tabs, weg beim Schließen"),
+        h("dt", {}, "Token"), h("dd", {}, DEMO ? "Demo-Modus, kein Token" : "nur in diesem Tab (sessionStorage), übersteht Neuladen, weg beim Schließen des Tabs"),
         h("dt", {}, "Aktualisierung"), h("dd", {}, "alle 60 Sekunden, während ein Agent läuft alle 8 Sekunden"),
         h("dt", {}, "Ergebnis-Details"), h("dd", {}, "werden 14 Tage bei GitHub aufbewahrt und danach automatisch gelöscht")),
       h("div", { style: { marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" } },
@@ -787,4 +945,8 @@ function viewSettings() {
 }
 
 // ---------- Start ----------
-if (DEMO) { state.connected = true; startApp(); } else renderLogin();
+// Neuladen der Seite ohne neues Einloggen: der Token liegt fuer die Dauer
+// des Tabs im sessionStorage. Ist er abgelaufen, meldet load() per 401 ab.
+if (DEMO) { state.connected = true; startApp(); }
+else if (storedToken()) { gh.setToken(storedToken()); state.connected = true; startApp(); }
+else renderLogin();
