@@ -7,6 +7,7 @@
 //   quiet       -> planmaessige erfolgreiche Laeufe nicht in der Aktivitaet zeigen
 //   graceHours  -> Toleranz, GitHub startet Cron-Laeufe oft verspaetet
 //   artifact    -> Name des Ergebnis-Artifacts (optional), result.json darin
+//   artifactFile-> anderer Dateiname im Artifact (Standard result.json)
 //   confirm     -> Text der Sicherheitsabfrage vor dem manuellen Start
 //   input       -> statt Sicherheitsabfrage ein Textfeld; der Text geht als
 //                  workflow_dispatch-Input "text" mit (plus source=dashboard)
@@ -58,6 +59,7 @@ export const AGENTS = [
     schedule: { utcHours: [4, 6, 8, 10, 12, 14, 16, 18, 20], utcMinute: 0, label: "alle 2 Std. von 6 bis 22 Uhr" },
     graceHours: 1.5,
     artifact: "sync-result",
+    artifactFile: "snapshot.json",
     results: 1,
     quiet: true,
     confirm: false,

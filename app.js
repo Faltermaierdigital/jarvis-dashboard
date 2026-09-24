@@ -168,7 +168,7 @@ async function loadResults(cfg) {
     .filter((a) => a.workflow_run && !state.results[a.workflow_run.id]);
   await Promise.all(todo.map(async (a) => {
     try {
-      const data = await gh.readArtifactJson(OWNER, cfg.repo, a.id);
+      const data = await gh.readArtifactJson(OWNER, cfg.repo, a.id, cfg.artifactFile || "result.json");
       state.results[a.workflow_run.id] = { ...data, agent: cfg.id };
     } catch (e) {
       state.resultErrors.push(`${cfg.name}: Ergebnis vom ${fShort.format(new Date(a.created_at))} nicht lesbar (${e.message})`);
