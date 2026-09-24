@@ -10,8 +10,10 @@
   <meta name="theme-color" content="#0b1424">
   <title>Jarvis Kontrollzentrum</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css">
-  <script type="module" src="app.js"></script>
+  <link rel="stylesheet" href="app.css?v=3">
+  <!-- Versionsnummer bei jeder Aenderung an JS/CSS hochzaehlen (hier und in den
+       Imports oben in app.js), sonst liefert der Browser bis zu 10 Min. alte Dateien. -->
+  <script type="module" src="app.js?v=3"></script>
 </head>
 <body>
   <div id="root"></div>

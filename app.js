@@ -1,5 +1,5 @@
-import { OWNER, AGENTS } from "./config.js";
-import * as gh from "./github.js";
+import { OWNER, AGENTS } from "./config.js?v=3";
+import * as gh from "./github.js?v=3";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -120,7 +120,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js");
+      const { buildDemo } = await import("./demo.js?v=3");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -412,6 +412,7 @@ function render() {
 
   const body = [];
   if (state.error) body.push(h("div", { class: "notice err" }, `GitHub nicht erreichbar: ${state.error}`));
+  for (const m of state.resultErrors) body.push(h("div", { class: "notice" }, m));
   if (!state.lastUpdate && !state.error) body.push(h("div", { class: "empty" }, "Lade Daten von GitHub …"));
   else body.push(view.render());
 
@@ -643,7 +644,6 @@ function viewOverview() {
     const st = agentStatus(c);
     if (["fail", "late"].includes(st.key)) alerts.push(h("div", { class: `notice${st.key === "fail" ? " err" : ""}` }, `${c.name}: ${st.label}${st.detail ? ` · ${st.detail}` : ""}${state.agentErrors[c.id] ? ` (${state.agentErrors[c.id]})` : ""}`));
   }
-  for (const m of state.resultErrors) alerts.push(h("div", { class: "notice" }, m));
 
   return [
     alerts,
