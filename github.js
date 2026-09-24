@@ -75,6 +75,8 @@ async function unzipFile(buf, wanted) {
   const count = dv.getUint16(eocd + 10, true);
   let off = dv.getUint32(eocd + 16, true);
   const dec = new TextDecoder();
+  // Liegt genau eine Datei im ZIP, wird sie genommen, egal wie sie heisst.
+  if (count === 1) wanted = dec.decode(new Uint8Array(buf, off + 46, dv.getUint16(off + 28, true)));
   for (let n = 0; n < count; n++) {
     if (dv.getUint32(off, true) !== 0x02014b50) break;
     const method = dv.getUint16(off + 10, true);
