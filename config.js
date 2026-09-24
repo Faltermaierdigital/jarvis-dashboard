@@ -5,6 +5,8 @@
 //   graceHours  -> Toleranz, GitHub startet Cron-Laeufe oft verspaetet
 //   artifact    -> Name des Ergebnis-Artifacts (optional), result.json darin
 //   confirm     -> Text der Sicherheitsabfrage vor dem manuellen Start
+//   input       -> statt Sicherheitsabfrage ein Textfeld; der Text geht als
+//                  workflow_dispatch-Input "text" mit (plus source=dashboard)
 // Geplanter Agent: status: "planned" + note, dann ohne Start-Knopf.
 
 export const OWNER = "Faltermaierdigital";
@@ -23,6 +25,23 @@ export const AGENTS = [
     graceHours: 3,
     artifact: "mailagent-result",
     confirm: "Der Mailagent prüft jetzt alle Postfächer. Ab dem 28.09. verschiebt er erkannte Werbung dabei in den Papierkorb.",
+  },
+  {
+    id: "watchdiktat",
+    name: "Watch-Diktat",
+    description: "Diktat → Termin im Kalender oder Aufgabe in Todoist",
+    icon: "mic",
+    color: "green",
+    repo: "watch-diktat",
+    workflow: "diktat.yml",
+    ref: "main",
+    artifact: "diktat-result",
+    input: {
+      title: "Diktat eingeben",
+      text: "Wie auf der Uhr: Claude entscheidet, ob daraus ein Termin oder eine Aufgabe wird.",
+      placeholder: "z. B. Zahnarzt Dienstag 10 Uhr",
+      button: "Eintragen",
+    },
   },
   {
     id: "dienstplan",

@@ -69,6 +69,8 @@ const ICONS = {
   logout: ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"],
   refresh: ["M21 12a9 9 0 1 1-2.6-6.4", "M21 3v6h-6"],
   external: ["M14 3h7v7", "M10 14 21 3", "M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"],
+  mic: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", "M5 11a7 7 0 0 0 14 0", "M12 18v3M9 21h6"],
+  send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
 };
 function icon(name, cls) {
   return s("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", class: cls, "aria-hidden": "true" },
@@ -121,6 +123,7 @@ async function load() {
       state.runs = d.runs;
       state.results = d.results;
     } else {
+      state.resultErrors = [];
       await Promise.all(activeAgents().map(async (cfg) => {
         try {
           state.runs[cfg.id] = await gh.listRuns(OWNER, cfg.repo, cfg.workflow);
@@ -128,7 +131,9 @@ async function load() {
           if (cfg.artifact) await loadResults(cfg);
         } catch (e) {
           if (e.status === 401) throw e;
-          state.agentErrors[cfg.id] = e.message;
+          state.agentErrors[cfg.id] = e.status === 404
+            ? `Der Token hat keinen Zugriff auf das Repo ${cfg.repo}. Token bei GitHub um dieses Repo erweitern.`
+            : e.message;
         }
       }));
     }
@@ -154,7 +159,6 @@ async function loadResults(cfg) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, RESULT_DAYS)
     .filter((a) => a.workflow_run && !state.results[a.workflow_run.id]);
-  state.resultErrors = [];
   await Promise.all(todo.map(async (a) => {
     try {
       const data = await gh.readArtifactJson(OWNER, cfg.repo, a.id);
@@ -212,7 +216,8 @@ function agentStatus(cfg) {
     return { key: "ok", label: "Erfolgreich" };
   }
   if (last.conclusion === "cancelled") return { key: "late", label: "Abgebrochen" };
-  return { key: "fail", label: "Fehlgeschlagen" };
+  const failRes = state.results[last.id];
+  return { key: "fail", label: "Fehlgeschlagen", detail: failRes && failRes.error ? failRes.error : "" };
 }
 
 function successRate(cfg, days = 30) {
@@ -224,11 +229,18 @@ function successRate(cfg, days = 30) {
 
 // ---------- Aktionen ----------
 async function startAgent(cfg) {
-  const ok = await confirmDialog(`${cfg.name} jetzt starten?`, cfg.confirm || "Der Agent wird sofort ausgeführt.", "Jetzt starten");
-  if (!ok) return;
+  let inputs;
+  if (cfg.input) {
+    const text = await inputDialog(cfg.input);
+    if (!text) return;
+    inputs = { text, source: "dashboard" };
+  } else {
+    const ok = await confirmDialog(`${cfg.name} jetzt starten?`, cfg.confirm || "Der Agent wird sofort ausgeführt.", "Jetzt starten");
+    if (!ok) return;
+  }
   if (DEMO) { toast("Demo-Modus: Es wurde nichts gestartet."); return; }
   try {
-    await gh.dispatch(OWNER, cfg.repo, cfg.workflow, cfg.ref || "main");
+    await gh.dispatch(OWNER, cfg.repo, cfg.workflow, cfg.ref || "main", inputs);
     state.pending[cfg.id] = Date.now();
     toast(`${cfg.name} gestartet. Der Status aktualisiert sich automatisch.`);
     render();
@@ -257,6 +269,25 @@ function confirmDialog(title, text, okLabel) {
     overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(false); });
     document.body.append(overlay);
     okBtn.focus();
+  });
+}
+
+function inputDialog(spec) {
+  return new Promise((resolve) => {
+    const close = (v) => { overlay.remove(); resolve(v); };
+    const area = h("textarea", { rows: "3", maxlength: "1000", placeholder: spec.placeholder || "", "aria-label": spec.title });
+    const okBtn = h("button", { class: "btn primary", type: "submit" }, icon("send"), spec.button || "Senden");
+    const form = h("form", {
+      class: "panel modal", role: "dialog", "aria-modal": "true",
+      onsubmit: (e) => { e.preventDefault(); const t = area.value.trim(); if (t) close(t); },
+    },
+      h("h3", {}, spec.title), h("p", {}, spec.text || ""), area,
+      h("div", { class: "actions" }, h("button", { class: "btn ghost", type: "button", onclick: () => close(null) }, "Abbrechen"), okBtn));
+    area.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
+    const overlay = h("div", { class: "overlay", onclick: (e) => { if (e.target === overlay) close(null); } }, form);
+    overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
+    document.body.append(overlay);
+    area.focus();
   });
 }
 
@@ -312,6 +343,7 @@ const VIEWS = [
   { id: "uebersicht", label: "Übersicht", icon: "home", render: viewOverview },
   { id: "agents", label: "Agents", icon: "agents", render: viewAgents },
   { id: "mailfilter", label: "Mail-Filter", icon: "filter", render: viewMail },
+  { id: "diktate", label: "Diktate", icon: "mic", render: viewDiktate },
   { id: "aktivitaet", label: "Aktivität", icon: "activity", render: viewActivity },
   { id: "einstellungen", label: "Einstellungen", icon: "settings", render: viewSettings },
 ];
@@ -381,6 +413,7 @@ function agentRow(cfg, detailed) {
   const meta = cfg.status === "planned" ? cfg.note :
     last ? `${rate ? `${rate.ok}/${rate.total} ok` : "–"} · ${when(last.created_at)}` : "noch kein Lauf";
   const btn = cfg.status === "planned" ? h("button", { class: "btn", disabled: true }, icon("play"), "Starten") :
+    cfg.input ? h("button", { class: "btn", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.button || "Senden") :
     h("button", { class: "btn", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Starten");
   return h("div", { class: "agent-row" },
     h("div", { class: `agent-ico c-${cfg.color}` }, icon(cfg.icon)),
@@ -398,6 +431,7 @@ function activityEvents(limit) {
         const res = state.results[r.id];
         let text = `${cfg.name} ${r.conclusion === "success" ? "erfolgreich" : r.conclusion === "cancelled" ? "abgebrochen" : "FEHLGESCHLAGEN"}`;
         if (res && res.totals) text += ` · ${res.totals.candidates} Werbung, ${res.totals.flagged} auffällig`;
+        else if (res && res.title) text += ` · ${res.type === "event" ? "Termin" : "Aufgabe"}: ${res.title}`;
         ev.push({ t: new Date(r.updated_at), color: r.conclusion === "success" ? "green" : "red", text, url: r.html_url });
       } else {
         ev.push({ t: new Date(r.updated_at), color: "cyan", text: `${cfg.name} läuft …`, url: r.html_url });
@@ -605,6 +639,7 @@ function viewAgents() {
       h("p", { class: "muted" }, cfg.description),
       h("dl", { class: "kv" }, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
       cfg.status === "planned" ? null : h("div", { style: { marginTop: "16px" } },
+        cfg.input ? h("button", { class: "btn primary", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.title) :
         h("button", { class: "btn primary", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Jetzt starten")));
   });
 }
@@ -667,6 +702,40 @@ function viewMail() {
   ];
 }
 
+function viewDiktate() {
+  const cfg = AGENTS.find((a) => a.id === "watchdiktat");
+  const results = resultsFor("watchdiktat");
+  const runs = state.runs.watchdiktat || [];
+  const pendingRuns = runs.filter((r) => r.status !== "completed");
+  const weekAgo = Date.now() - 7 * 864e5;
+  const week = results.filter((r) => new Date(r.finished_at) >= weekAgo);
+  const SRC = { watch: "Uhr", dashboard: "Dashboard" };
+  return [
+    state.agentErrors.watchdiktat ? h("div", { class: "notice err" }, state.agentErrors.watchdiktat) : null,
+    h("div", { class: "stats" },
+      statCard("mic", "green", "Diktate · 7 Tage", String(week.length)),
+      statCard("zap", "cyan", "Termine", String(week.filter((r) => r.ok && r.type === "event").length), "7 Tage"),
+      statCard("check", "violet", "Aufgaben", String(week.filter((r) => r.ok && r.type === "task").length), "7 Tage"),
+      statCard("pulse", week.some((r) => !r.ok) ? "red" : "amber", "Fehler", String(week.filter((r) => !r.ok).length), "7 Tage")),
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" }, h("h2", {}, "Verlauf · 14 Tage"),
+        cfg ? h("button", { class: "btn primary", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.title) : null),
+      pendingRuns.length ? h("div", { class: "notice" }, `${pendingRuns.length} Diktat${pendingRuns.length > 1 ? "e werden" : " wird"} gerade verarbeitet …`) : null,
+      results.length ? h("div", { class: "table-wrap" }, h("table", {},
+        h("thead", {}, h("tr", {}, ["Zeit", "Quelle", "Diktat", "Angelegt als", "Wann", "Status"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, results.map((r) => h("tr", {},
+          h("td", { class: "nowrap mono" }, when(r.received_at || r.finished_at)),
+          h("td", { class: "nowrap" }, SRC[r.source] || r.source || "–"),
+          h("td", { class: "wrap" }, r.text || "–"),
+          h("td", { class: "wrap" }, r.ok ? [h("span", { class: `tag ${r.type === "event" ? "c-cyan" : "c-violet"}` }, r.type === "event" ? "Termin" : "Aufgabe"), " ", r.title] : "–"),
+          h("td", { class: "wrap muted" }, r.ok ? [r.when || "", r.target ? ` · ${r.target}` : ""] : ""),
+          h("td", { class: "wrap" }, r.ok
+            ? (r.link ? h("a", { href: r.link, target: "_blank", rel: "noopener noreferrer" }, "öffnen ↗") : h("span", { class: "tag c-green" }, "angelegt"))
+            : [h("span", { class: "tag c-red" }, "Fehler"), " ", h("span", { class: "muted" }, r.error || "")])))))) :
+        h("div", { class: "empty" }, "Noch keine Diktate. Die Einträge werden 14 Tage aufbewahrt und danach automatisch gelöscht.")),
+  ];
+}
+
 function viewActivity() {
   const rows = [];
   for (const cfg of activeAgents()) for (const r of state.runs[cfg.id] || []) rows.push({ cfg, r });
@@ -683,7 +752,9 @@ function viewActivity() {
           h("td", {}, r.event === "schedule" ? "Zeitplan" : r.event === "workflow_dispatch" ? "manuell" : r.event),
           h("td", { class: "nowrap mono" }, when(r.created_at)),
           h("td", { class: "nowrap mono" }, r.status === "completed" ? duration(r) : "…"),
-          h("td", { class: "nowrap" }, h("span", { class: `tag ${cls}` }, label), res && res.totals ? h("span", { class: "muted" }, ` ${res.totals.candidates} Werbung`) : null),
+          h("td", { class: "nowrap" }, h("span", { class: `tag ${cls}` }, label),
+            res && res.totals ? h("span", { class: "muted" }, ` ${res.totals.candidates} Werbung`) :
+              res && res.title ? h("span", { class: "muted" }, ` ${res.type === "event" ? "Termin" : "Aufgabe"}`) : null),
           h("td", { class: "nowrap" }, r.html_url && r.html_url !== "#demo" ? h("a", { href: r.html_url, target: "_blank", rel: "noopener noreferrer" }, "Log ↗") : ""));
       })))) : h("div", { class: "empty" }, "Noch keine Läufe."));
 }

@@ -29,7 +29,7 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .mono { font-family: var(--mono); }
@@ -230,6 +230,11 @@ td.nowrap { white-space: nowrap; }
 .modal { max-width: 440px; width: 100%; }
 .modal h3 { margin: 0 0 8px; font-weight: 500; font-size: 19px; }
 .modal p { margin: 0 0 18px; color: #c5d1e3; font-size: 14.5px; }
+.modal textarea {
+  width: 100%; resize: vertical; margin: -6px 0 16px; background: #0b1628; border: 1px solid var(--line-2);
+  border-radius: 8px; padding: 10px 12px; font-size: 16px; line-height: 1.4;
+}
+.modal textarea:focus { outline: 2px solid #2f7fd0; outline-offset: 1px; }
 .modal .actions { display: flex; justify-content: flex-end; gap: 10px; }
 .toast {
   position: fixed; right: 20px; bottom: 20px; z-index: 30; background: #0f2036; border: 1px solid var(--line-2);
@@ -251,7 +256,8 @@ td.nowrap { white-space: nowrap; }
     border-right: 0; border-top: 1px solid var(--line); background: #0a1424;
   }
   .sidebar .logo, .sidebar .spacer, .sidebar .foot { display: none; }
-  .nav-item { flex-direction: column; gap: 3px; padding: 8px 2px; font-size: 11px; justify-content: center; align-items: center; }
+  .nav-item { flex-direction: column; gap: 3px; padding: 8px 0; font-size: 10px; justify-content: center; align-items: center; min-width: 0; flex: 1 1 0; }
+  .nav-item svg { width: 20px; height: 20px; }
   .nav-item.active::before { left: 25%; right: 25%; top: 0; bottom: auto; width: auto; height: 2px; }
   .main { padding-bottom: 76px; }
   .topbar { padding: 14px 16px 12px; }

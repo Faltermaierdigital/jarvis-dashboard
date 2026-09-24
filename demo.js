@@ -19,6 +19,14 @@ const FLAGS = [
   ["Lieferdienst <info@privaterelay.example>", "Ihre Rechnung ist fällig", "Verdächtige Rechnungsdomain"],
 ];
 
+const DIKTATE = [
+  ["Zahnarzt am Dienstag um zehn", "event", "Zahnarzt", "29.09.2026 10:00-11:00", "Google Kalender", true],
+  ["Erinnere mich morgen das Angebot vom Großhändler nachzufassen", "task", "Angebot Großhändler nachfassen", "fällig 26.09.2026", "Todoist · Inbox", true],
+  ["Weinlieferung prüfen", "task", "Weinlieferung prüfen", "ohne Datum", "Todoist · Inbox", true],
+  ["Meeting mit dem Steuerberater Freitag 14 Uhr", "event", "Termin Steuerberater", "02.10.2026 14:00-15:00", "Google Kalender", true],
+  ["Kühlhaus Wartung anrufen", "task", "", "", "", false],
+];
+
 function rng(seed) {
   let s = seed;
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
@@ -34,6 +42,22 @@ export function buildDemo(agents) {
   for (const cfg of agents) {
     if (cfg.status === "planned") continue;
     runs[cfg.id] = [];
+    if (cfg.input) {
+      DIKTATE.forEach(([text, type, title, whenText, target, ok], i) => {
+        const t = new Date(now.getTime() - (i * 19 + 2) * 3600e3);
+        const run = {
+          id: ++id, status: "completed", conclusion: ok ? "success" : "failure",
+          event: "workflow_dispatch", created_at: t.toISOString(), run_started_at: t.toISOString(),
+          updated_at: new Date(t.getTime() + 24000).toISOString(), html_url: "#demo",
+        };
+        runs[cfg.id].push(run);
+        results[run.id] = {
+          agent: cfg.id, received_at: t.toISOString(), finished_at: run.updated_at, source: i % 3 ? "watch" : "dashboard",
+          text, ok, ...(ok ? { type, title, when: whenText, target } : { error: "Todoist 401: Token ungültig" }),
+        };
+      });
+      continue;
+    }
     for (let d = 13; d >= 0; d--) {
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - d, 6, 10 + Math.floor(rand() * 40), Math.floor(rand() * 59)));
       if (start > now) continue;

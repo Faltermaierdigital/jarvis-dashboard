@@ -44,10 +44,10 @@ export async function listRuns(owner, repo, workflow, perPage = 50) {
   return j.workflow_runs || [];
 }
 
-export async function dispatch(owner, repo, workflow, ref) {
+export async function dispatch(owner, repo, workflow, ref, inputs) {
   await request(`/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`, {
     method: "POST",
-    body: { ref },
+    body: inputs ? { ref, inputs } : { ref },
   });
 }
 
