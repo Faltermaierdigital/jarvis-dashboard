@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=8";
-import * as gh from "./github.js?v=8";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=9";
+import * as gh from "./github.js?v=9";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -128,7 +128,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=8");
+      const { buildDemo } = await import("./demo.js?v=9");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -169,7 +169,7 @@ async function load() {
 }
 
 async function loadResults(cfg) {
-  const arts = await gh.listArtifacts(OWNER, cfg.repo, cfg.artifact);
+  const arts = await gh.listArtifacts(OWNER, cfg.repo, cfg.artifact, Math.min(100, Math.max(30, cfg.results || RESULT_DAYS)));
   const todo = arts
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, cfg.results || RESULT_DAYS)
@@ -523,10 +523,24 @@ function smoothPath(pts) {
   return d;
 }
 
+// Seit 25.09.2026 laeuft der Mailagent alle 2 Stunden und prueft nur neue Mails.
+// Ein Tag besteht also aus mehreren Laeufen: Treffer werden pro Tag addiert.
+function mailDays() {
+  const byDay = new Map();
+  for (const r of resultsFor("mailagent")) {
+    const k = dayKey(new Date(r.finished_at));
+    if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, moved: 0, failed: 0, scanned: 0 }, cost: 0, hasCost: false });
+    const d = byDay.get(k);
+    d.runs.push(r);
+    for (const f of Object.keys(d.totals)) d.totals[f] += (r.totals && r.totals[f]) || 0;
+    if (r.usage && typeof r.usage.cost_usd === "number") { d.cost += r.usage.cost_usd; d.hasCost = true; }
+  }
+  return byDay;
+}
+
 function mailChart() {
   const results = resultsFor("mailagent");
-  const byDay = new Map();
-  for (const r of results) { const k = dayKey(new Date(r.finished_at)); if (!byDay.has(k)) byDay.set(k, r); }
+  const byDay = mailDays();
   const days = [];
   for (let i = RESULT_DAYS - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 864e5);
@@ -650,7 +664,7 @@ function viewOverview() {
   const runs7 = act.reduce((sum, c) => sum + (state.runs[c.id] || []).filter((r) => new Date(r.created_at) >= weekAgo).length, 0);
   const rates = act.map((c) => successRate(c)).filter(Boolean);
   const okAll = rates.reduce((a, r) => a + r.ok, 0), totAll = rates.reduce((a, r) => a + r.total, 0);
-  const lastRes = resultsFor("mailagent")[0];
+  const todayMail = mailDays().get(dayKey(new Date()));
 
   const alerts = [];
   for (const c of act) {
@@ -669,7 +683,7 @@ function viewOverview() {
       statCard("pulse", "cyan", "Agents gesund", `${healthy} / ${act.length}`, planned ? `+${planned} geplant` : ""),
       statCard("zap", "violet", "Läufe · 7 Tage", String(runs7)),
       statCard("check", "green", "Erfolgsquote · 30 T.", totAll ? `${Math.round((okAll / totAll) * 100)} %` : "–"),
-      statCard("inbox", "amber", "Werbung erkannt", lastRes ? String(lastRes.totals.candidates) : "–", lastRes ? "letzter Lauf" : "")),
+      statCard("inbox", "amber", "Werbung erkannt", todayMail ? String(todayMail.totals.candidates) : "0", "heute")),
     h("div", { class: "row-3" }, eventsPanel(true), tasksPanel(true)),
     h("div", { class: "row-2" }, mailChart(), mailboxRing()),
     h("div", { class: "row-3" },
@@ -711,12 +725,23 @@ function viewAgents() {
 function viewMail() {
   const results = resultsFor("mailagent");
   if (!results.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Ergebnisse vorhanden. Die Details werden 14 Tage aufbewahrt und danach automatisch gelöscht."));
-  if (!results.some((r) => r.runId === state.ui.run)) state.ui.run = results[0].runId;
-  const res = results.find((r) => r.runId === state.ui.run);
+  const days = [...mailDays().values()];
+  if (!days.some((d) => d.key === state.ui.mailDay)) state.ui.mailDay = days[0].key;
+  const day = days.find((d) => d.key === state.ui.mailDay);
+  // Postfach-Status vom juengsten Lauf des Tages, Treffer aus allen Laeufen des Tages.
+  const latest = day.runs[0];
+  const res = {
+    ...latest,
+    accounts: latest.accounts.map((a) => ({
+      ...a,
+      scanned: day.runs.reduce((s, r) => s + ((r.accounts.find((x) => x.account === a.account) || {}).scanned || 0), 0),
+      items: day.runs.flatMap((r) => (r.accounts.find((x) => x.account === a.account) || { items: [] }).items),
+    })),
+  };
 
-  const runSel = h("select", { "aria-label": "Lauf", onchange: (e) => { state.ui.run = Number(e.target.value); render(); } },
-    results.map((r) => h("option", { value: r.runId, selected: r.runId === state.ui.run },
-      `${fDayLong.format(new Date(r.finished_at))} ${fTime.format(new Date(r.finished_at)).slice(0, 5)} · ${r.totals.candidates + r.totals.flagged} Treffer`)));
+  const runSel = h("select", { "aria-label": "Tag", onchange: (e) => { state.ui.mailDay = e.target.value; render(); } },
+    days.map((d) => h("option", { value: d.key, selected: d.key === state.ui.mailDay },
+      `${dayLabel(d.key)} · ${d.totals.candidates + d.totals.flagged} Treffer · ${d.runs.length} Lauf${d.runs.length > 1 ? "e" : ""}`)));
   const accSel = h("select", { "aria-label": "Postfach", onchange: (e) => { state.ui.account = e.target.value; render(); } },
     h("option", { value: "" }, "Alle Postfächer"),
     res.accounts.map((a) => h("option", { value: a.account, selected: a.account === state.ui.account }, `${a.account} (${a.items.length})`)));
@@ -743,13 +768,16 @@ function viewMail() {
         h("td", { class: "nowrap" }, h("span", { class: `tag ${cls}` }, label))));
     }
   }
-  const t = res.totals;
+  const t = { ...day.totals, accounts_ok: latest.totals.accounts_ok, accounts_total: latest.totals.accounts_total };
+  const weekAgo = Date.now() - 7 * 864e5;
+  const week = days.filter((d) => new Date(`${d.key}T12:00:00`) >= weekAgo && d.hasCost);
+  const cost7 = week.reduce((s, d) => s + d.cost, 0);
   return [
     h("div", { class: "stats" },
-      statCard("mail", "cyan", "Mails geprüft", String(t.scanned)),
       statCard("inbox", "amber", "Werbung erkannt", String(t.candidates), res.live_mode ? `${t.moved} verschoben` : "Testphase"),
       statCard("zap", "violet", "Auffällig", String(t.flagged), "nicht gelöscht"),
-      statCard("check", t.accounts_ok === t.accounts_total ? "green" : "red", "Postfächer ok", `${t.accounts_ok} / ${t.accounts_total}`)),
+      statCard("check", t.accounts_ok === t.accounts_total ? "green" : "red", "Postfächer ok", `${t.accounts_ok} / ${t.accounts_total}`, "letzter Lauf"),
+      statCard("pulse", "cyan", "Claude-Kosten", week.length ? `${cost7.toFixed(2).replace(".", ",")} $` : "–", week.length ? `${week.length} Tag${week.length > 1 ? "e" : ""}` : "noch keine Daten")),
     res.live_mode ? null : h("div", { class: "notice" }, `Testphase: Es wird nichts verschoben, nur gemeldet. Live ab ${fDay.format(new Date(res.live_mode_from || "2026-09-28"))}`),
     h("div", { class: "panel" },
       h("div", { class: "toolbar" }, runSel, accSel, kindSel),
