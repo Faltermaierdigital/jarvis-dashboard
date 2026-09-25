@@ -10,10 +10,17 @@
   <meta name="theme-color" content="#0b1424">
   <title>Jarvis Kontrollzentrum</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css?v=4">
+  <!-- Als App auf dem Home-Bildschirm (iPhone: Teilen -> Zum Home-Bildschirm) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jarvis">
+  <link rel="stylesheet" href="app.css?v=5">
   <!-- Versionsnummer bei jeder Aenderung an JS/CSS hochzaehlen (hier und in den
        Imports oben in app.js), sonst liefert der Browser bis zu 10 Min. alte Dateien. -->
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </head>
 <body>
   <div id="root"></div>

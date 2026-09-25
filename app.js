@@ -1,5 +1,5 @@
-import { OWNER, AGENTS } from "./config.js?v=4";
-import * as gh from "./github.js?v=4";
+import { OWNER, AGENTS } from "./config.js?v=5";
+import * as gh from "./github.js?v=5";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -120,7 +120,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=4");
+      const { buildDemo } = await import("./demo.js?v=5");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;

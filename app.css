@@ -295,7 +295,9 @@ td.nowrap { white-space: nowrap; }
   .nav-item svg { width: 20px; height: 20px; }
   .nav-item.active::before { left: 25%; right: 25%; top: 0; bottom: auto; width: auto; height: 2px; }
   .main { padding-bottom: 76px; }
-  .topbar { padding: 14px 16px 12px; }
+  /* Als Home-Bildschirm-App liegt die Seite unter der iPhone-Statusleiste. */
+  .topbar { padding: max(14px, env(safe-area-inset-top)) 16px 12px; }
+  .login { padding-top: max(16px, env(safe-area-inset-top)); }
   .brand h1 { font-size: 15px; letter-spacing: .16em; }
   .brand p { font-size: 12px; }
   .pill-outline { display: none; }
