@@ -42,6 +42,35 @@ export function buildDemo(agents) {
   for (const cfg of agents) {
     if (cfg.status === "planned") continue;
     runs[cfg.id] = [];
+    if (cfg.id === "dienstplan") {
+      const t = new Date(now.getTime() - 25 * 60e3);
+      const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),
+        run_started_at: t.toISOString(), updated_at: new Date(t.getTime() + 30000).toISOString(), html_url: "#demo" };
+      runs[cfg.id].push(run);
+      const monday = new Date(now); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const fmtD = (d) => `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+      const week = (offset, status, names) => {
+        const von = new Date(monday); von.setDate(von.getDate() + offset * 7);
+        const bis = new Date(von); bis.setDate(bis.getDate() + 6);
+        return {
+          tab: offset ? "Küche (nächste)" : "Küche", status, woche: { von: fmtD(von), bis: fmtD(bis) },
+          reservierung_mittag: ["5", "5", "20", "10", "0", "12", "6"], reservierung_abend: ["27", "14", "19", "15", "39", "38", "16"],
+          events: ["Messe", "Messe", "", "Bayern 20:30", "", "Stadtfest", "Stadtfest"],
+          mitarbeiter: names.map(([name, codes, u, ue]) => ({ name, codes, urlaub: u, ueberstunden: ue })),
+        };
+      };
+      const staff = [
+        ["Koch A", ["8", "8", "/", "8", "8", "16", "/"], "12", "10:30"],
+        ["Koch B", ["16", "/", "16", "16", "17", "17", "/"], "4", "-2:15"],
+        ["Koch C", ["u", "u", "u", "u", "u", "/", "/"], "-1", "0:00"],
+        ["Azubi D", ["Schule", "Schule", "Prüfung", "12", "12", "/", "/"], "20", "3:45"],
+        ["Aushilfe E", ["/", "/", "/", "17", "/", "/", "/"], "0", "0:00"],
+        ["Spüler F", ["K", "K", "12", "12", "/", "16", "16"], "8", "5:20"],
+      ];
+      results[run.id] = { agent: "dienstplan", finished_at: run.updated_at, sheet_url: "#", rollover: { hinweise: [] },
+        wochen: [week(0, "laufend", staff), week(1, "kommend", staff.map(([n, , u, ue]) => [n, ["", "", "", "", "", "", ""], u, ue]))] };
+      continue;
+    }
     if (cfg.id === "sync") {
       const t = new Date(now.getTime() - 40 * 60e3);
       const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),

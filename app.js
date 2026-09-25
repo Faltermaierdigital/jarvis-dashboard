@@ -1,5 +1,5 @@
-import { OWNER, AGENTS } from "./config.js?v=5";
-import * as gh from "./github.js?v=5";
+import { OWNER, AGENTS } from "./config.js?v=6";
+import * as gh from "./github.js?v=6";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -72,6 +72,7 @@ const ICONS = {
   external: ["M14 3h7v7", "M10 14 21 3", "M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"],
   mic: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", "M5 11a7 7 0 0 0 14 0", "M12 18v3M9 21h6"],
   send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
+  grid: ["M4 4h16v16H4z", "M4 9h16M4 14h16M9 4v16M14 4v16"],
 };
 function icon(name, cls) {
   return s("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", class: cls, "aria-hidden": "true" },
@@ -120,7 +121,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=5");
+      const { buildDemo } = await import("./demo.js?v=6");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -383,6 +384,7 @@ const VIEWS = [
   { id: "planer", label: "Planer", icon: "calendar", render: viewPlaner },
   { id: "agents", label: "Agents", icon: "agents", render: viewAgents },
   { id: "mailfilter", label: "Mail-Filter", icon: "filter", render: viewMail },
+  { id: "dienstplan", label: "Dienstplan", icon: "grid", render: viewDienstplan },
   { id: "diktate", label: "Diktate", icon: "mic", render: viewDiktate },
   { id: "aktivitaet", label: "Aktivität", icon: "activity", render: viewActivity },
   { id: "einstellungen", label: "Einstellungen", icon: "settings", render: viewSettings },
@@ -857,6 +859,95 @@ function viewPlaner() {
     snap && snap.errors && snap.errors.length ? h("div", { class: "notice err" }, `Letzter Abgleich mit Fehlern: ${snap.errors.join(" · ")}`) : null,
     h("div", { class: "row-3" }, eventsPanel(false), tasksPanel(false)),
     h("p", { class: "muted small" }, "Abgleich alle 2 Stunden zwischen 6 und 22 Uhr oder per Knopf. Ein Haken erledigt die Aufgabe in Todoist, das dauert etwa 30 Sekunden. Termine, die in Google als privat markiert sind, erscheinen als „Beschäftigt“."),
+  ];
+}
+
+// ---------- Dienstplan Küche ----------
+const WEEKDAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+
+// Schichtcode -> Darstellung. Zahl = Schichtbeginn, "/" = frei, u = Urlaub,
+// K = krank, Schule/Prüfung als Klartext (Konventionen aus der Dienstplan-Notiz).
+function shiftCode(raw) {
+  const v = (raw || "").trim();
+  if (!v) return { text: "", cls: "sc-empty" };
+  if (v === "/") return { text: "frei", cls: "sc-off" };
+  if (/^u$/i.test(v)) return { text: "Urlaub", cls: "sc-vac" };
+  if (/^k$/i.test(v)) return { text: "krank", cls: "sc-sick" };
+  if (/schule|prüf|pruef/i.test(v)) return { text: v, cls: "sc-school" };
+  if (/^\d{1,2}([:.]\d{2})?$/.test(v)) return { text: v.includes(":") || v.includes(".") ? v : `${v}:00`, cls: "sc-work" };
+  return { text: v, cls: "sc-other" };
+}
+
+function weekDates(woche) {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec((woche && woche.von) || "");
+  if (!m) return WEEKDAY_SHORT.map(() => "");
+  const start = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 12);
+  return WEEKDAY_SHORT.map((_, i) => {
+    const d = new Date(start.getTime() + i * 864e5);
+    return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.`;
+  });
+}
+
+function viewDienstplan() {
+  const snap = resultsFor("dienstplan")[0];
+  const cfg = AGENTS.find((a) => a.id === "dienstplan");
+  const running = cfg && agentStatus(cfg).key === "running";
+  const notices = [];
+  if (cfg && state.agentErrors[cfg.id]) notices.push(h("div", { class: "notice err" }, state.agentErrors[cfg.id]));
+  if (!snap) return [notices, h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch kein Abgleich gelaufen."))];
+
+  const roll = snap.rollover || {};
+  if ((roll.geloescht || []).length) notices.push(h("div", { class: "notice" }, `Wochenwechsel: ${roll.geloescht.join(", ")} archiviert und entfernt, neu angelegt: ${(roll.angelegt || []).map((a) => a.tab).join(", ") || "–"}.`));
+  for (const hnt of roll.hinweise || []) if (!/existiert bereits/.test(hnt)) notices.push(h("div", { class: "notice" }, hnt));
+
+  const weeks = snap.wochen || [];
+  if (!weeks.length) return [notices, h("div", { class: "panel" }, h("div", { class: "empty" }, "Keine laufende oder kommende Woche im Sheet gefunden."))];
+  if (!weeks.some((w) => w.tab === state.ui.week)) state.ui.week = weeks[0].tab;
+  const w = weeks.find((x) => x.tab === state.ui.week);
+  const dates = weekDates(w.woche);
+  const todayIdx = w.status === "laufend" ? (new Date().getDay() + 6) % 7 : -1;
+
+  const working = WEEKDAY_SHORT.map((_, i) => w.mitarbeiter.filter((m) => shiftCode(m.codes[i]).cls === "sc-work").length);
+  const absent = WEEKDAY_SHORT.map((_, i) => w.mitarbeiter.filter((m) => ["sc-vac", "sc-sick", "sc-school"].includes(shiftCode(m.codes[i]).cls)).length);
+  const th = (i) => ({ class: `nowrap${i === todayIdx ? " today" : ""}` });
+  const infoRow = (label, vals, cls) => h("tr", { class: cls },
+    h("th", { class: "sticky" }, label), vals.map((v, i) => h("td", th(i), v || "")), h("td", {}, ""), h("td", {}, ""));
+
+  const table = h("table", { class: "plan" },
+    h("thead", {}, h("tr", {},
+      h("th", { class: "sticky" }, "Mitarbeiter"),
+      WEEKDAY_SHORT.map((d, i) => h("th", th(i), d, h("div", { class: "muted small" }, dates[i]))),
+      h("th", {}, "Urlaub"), h("th", {}, "Überst."))),
+    h("tbody", {},
+      infoRow("Res. Mittag", w.reservierung_mittag, "info"),
+      infoRow("Res. Abend", w.reservierung_abend, "info"),
+      infoRow("Events", w.events, "info events"),
+      infoRow("Im Dienst", working.map(String), "info sum"),
+      infoRow("Abwesend", absent.map((n) => (n ? String(n) : "")), "info sum"),
+      w.mitarbeiter.map((m) => h("tr", {},
+        h("th", { class: "sticky name" }, m.name),
+        m.codes.map((c, i) => { const s = shiftCode(c); return h("td", th(i), h("span", { class: `sc ${s.cls}` }, s.text)); }),
+        h("td", { class: `nowrap ${String(m.urlaub).trim().startsWith("-") ? "c-red" : ""}` }, m.urlaub),
+        h("td", { class: `nowrap mono ${String(m.ueberstunden).trim().startsWith("-") ? "c-red" : ""}` }, m.ueberstunden)))));
+
+  return [
+    notices,
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" },
+        h("div", { class: "week-tabs" }, weeks.map((x) => h("button", {
+          class: `btn ${x.tab === w.tab ? "primary" : "ghost"}`, onclick: () => { state.ui.week = x.tab; render(); },
+        }, `${x.status === "laufend" ? "Diese Woche" : x.status === "kommend" ? "Nächste Woche" : x.tab} · ${x.woche.von || "?"}–${x.woche.bis || "?"}`))),
+        h("div", { class: "head-actions" },
+          h("span", { class: "muted small" }, `Stand ${fHM.format(new Date(snap.finished_at))}`),
+          h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Im Sheet öffnen"),
+          cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("refresh"), running ? "Gleicht ab …" : "Jetzt abgleichen") : null)),
+      h("div", { class: "table-wrap plan-wrap" }, table),
+      h("div", { class: "legend plan-legend" },
+        h("span", {}, h("span", { class: "sc sc-work" }, "17:00"), " Schichtbeginn"),
+        h("span", {}, h("span", { class: "sc sc-off" }, "frei")),
+        h("span", {}, h("span", { class: "sc sc-vac" }, "Urlaub")),
+        h("span", {}, h("span", { class: "sc sc-sick" }, "krank")),
+        h("span", {}, h("span", { class: "sc sc-school" }, "Schule")))),
   ];
 }
 

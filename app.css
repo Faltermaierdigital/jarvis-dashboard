@@ -273,6 +273,31 @@ td.nowrap { white-space: nowrap; }
 .task-meta { font-size: 12.5px; margin-top: 1px; }
 .task.done .task-title { text-decoration: line-through; color: var(--dim); }
 
+/* Dienstplan */
+.week-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-wrap { margin-top: 4px; }
+table.plan { font-size: 13.5px; min-width: 760px; }
+table.plan th, table.plan td { text-align: center; padding: 7px 8px; }
+table.plan th.sticky {
+  position: sticky; left: 0; z-index: 1; text-align: left; background: #0f1d31;
+  text-transform: none; letter-spacing: 0; font-size: 13.5px; color: #dfe7f3; white-space: nowrap;
+}
+table.plan thead th { color: var(--muted); }
+table.plan .today { background: rgba(56,200,240,.07); }
+table.plan tr.info td { color: #9fb0c8; font-size: 12.5px; }
+table.plan tr.info th.sticky { color: var(--muted); font-weight: 500; }
+table.plan tr.events td { color: #f7d58c; max-width: 120px; overflow-wrap: anywhere; }
+table.plan tr.sum td { color: var(--text); font-weight: 600; }
+table.plan tr.sum:last-of-type td, table.plan tr.sum + tr td { border-bottom-color: var(--line-2); }
+.sc { display: inline-block; min-width: 46px; padding: 2px 6px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; }
+.sc-work { background: rgba(56,200,240,.12); color: #bfeeff; font-family: var(--mono); }
+.sc-off { color: var(--dim); }
+.sc-vac { background: rgba(139,124,246,.16); color: #cfc6ff; }
+.sc-sick { background: rgba(240,97,109,.16); color: #ffb9bf; }
+.sc-school { background: rgba(47,211,154,.14); color: #aef1d6; }
+.sc-other { background: rgba(245,183,59,.12); color: #f7d58c; }
+.plan-legend { margin-top: 12px; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1180px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -290,6 +315,9 @@ td.nowrap { white-space: nowrap; }
   .sidebar::-webkit-scrollbar { display: none; }
   .nav-item { flex-direction: column; gap: 3px; padding: 8px 0; font-size: 10.5px; justify-content: center; align-items: center; min-width: 62px; flex: 1 0 62px; }
   .refresh-label { display: none; }
+  .panel-head { flex-wrap: wrap; }
+  .head-actions { justify-content: flex-start; }
+  .week-tabs .btn { font-size: 13px; padding: 6px 10px; }
   .top-actions .pill-outline { display: none; }
   .event { grid-template-columns: 88px minmax(0, 1fr); font-size: 14px; }
   .nav-item svg { width: 20px; height: 20px; }
