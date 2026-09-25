@@ -99,6 +99,26 @@ export function buildDemo(agents) {
       };
       continue;
     }
+    if (cfg.id === "schank") {
+      const t = new Date(now.getTime() - 3 * 3600e3);
+      const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),
+        run_started_at: t.toISOString(), updated_at: new Date(t.getTime() + 17000).toISOString(), html_url: "#demo" };
+      runs[cfg.id].push(run);
+      const verlauf = [];
+      for (let d = 16; d >= 1; d--) {
+        const x = new Date(now); x.setDate(x.getDate() - d);
+        const tag = `${String(x.getDate()).padStart(2, "0")}.${String(x.getMonth() + 1).padStart(2, "0")}.${x.getFullYear()}`;
+        const hk = 50 + rand() * 120, wk = 15 + rand() * 25;
+        const hz = hk + (rand() - 0.4) * 8, wz = wk + rand() * 5 + (d === 3 ? 26 : 0);
+        verlauf.push({ tag, hell_zapf: hz, hell_kasse: hk, wb_zapf: wz, wb_kasse: wk, zapf_gesamt: hz + wz + 25,
+          kasse_gesamt: hk + wk + 20, haus_liter: 20 + rand() * 25, haus_anzahl: 60 + Math.floor(rand() * 80),
+          kredite: 300, kredite_ungenutzt: 280, fasswarnungen: d === 3 ? 14 : 3 + Math.floor(rand() * 4) });
+      }
+      const last = verlauf[verlauf.length - 1];
+      results[run.id] = { agent: "schank", finished_at: run.updated_at, tag: last.tag, status: "OK", auffaellig: [], verlauf,
+        haus_top: [["Stillwasser 0,4", 21], ["Saftschorle 0,4", 18], ["Aperol Spritz", 6]] };
+      continue;
+    }
     if (cfg.input) {
       DIKTATE.forEach(([text, type, title, whenText, target, ok], i) => {
         const t = new Date(now.getTime() - (i * 19 + 2) * 3600e3);

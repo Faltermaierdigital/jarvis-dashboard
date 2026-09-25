@@ -17,6 +17,12 @@
 
 export const OWNER = "Faltermaierdigital";
 
+// Geklaerte Schank-Tage (Datum wie im smartSCHANK-Bericht). Diese Tage werden im
+// Schank-Chart markiert und koennen im Schwund-Rechner ausgeklammert werden.
+export const SCHANK_NOTES = {
+  "23.09.2026": "Leitungsreinigung, falsch durchgeführt (Josef)",
+};
+
 export const AGENTS = [
   {
     id: "mailagent",
@@ -82,6 +88,22 @@ export const AGENTS = [
     results: 1,
     quiet: true,
     confirm: false,
+  },
+  {
+    id: "schank",
+    name: "Brezn Schankbericht",
+    description: "Zapfhahn gegen Kasse, täglich per Mail an josef@",
+    icon: "beer",
+    color: "amber",
+    repo: "claude-mailagent",
+    workflow: "smartschank.yml",
+    ref: "main",
+    schedule: { utcHours: [7], utcMinute: 30, label: "täglich 9:30 Uhr (Winter 8:30)" },
+    graceHours: 3,
+    artifact: "smartschank-result",
+    artifactFile: "smartschank_result.json",
+    results: 1,
+    confirm: "Der Schankbericht wird neu erstellt und an josef@hotel-faltermaier.de geschickt.",
   },
   {
     id: "dienstplan-live",

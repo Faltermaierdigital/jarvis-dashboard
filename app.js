@@ -1,5 +1,5 @@
-import { OWNER, AGENTS } from "./config.js?v=7";
-import * as gh from "./github.js?v=7";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=8";
+import * as gh from "./github.js?v=8";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -73,6 +73,7 @@ const ICONS = {
   mic: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", "M5 11a7 7 0 0 0 14 0", "M12 18v3M9 21h6"],
   send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
   grid: ["M4 4h16v16H4z", "M4 9h16M4 14h16M9 4v16M14 4v16"],
+  beer: ["M6 8h10v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z", "M16 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2", "M6 8a3 3 0 0 1 3-4 3 3 0 0 1 5 1 2.5 2.5 0 0 1 2 3", "M9.5 12v6M12.5 12v6"],
 };
 function icon(name, cls) {
   return s("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", class: cls, "aria-hidden": "true" },
@@ -127,7 +128,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=7");
+      const { buildDemo } = await import("./demo.js?v=8");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -392,6 +393,7 @@ const VIEWS = [
   { id: "agents", label: "Agents", icon: "agents", render: viewAgents },
   { id: "mailfilter", label: "Mail-Filter", icon: "filter", render: viewMail },
   { id: "dienstplan", label: "Dienstplan", icon: "grid", render: viewDienstplan },
+  { id: "schank", label: "Schank", icon: "beer", render: viewSchank },
   { id: "diktate", label: "Diktate", icon: "mic", render: viewDiktate },
   { id: "aktivitaet", label: "Aktivität", icon: "activity", render: viewActivity },
   { id: "einstellungen", label: "Einstellungen", icon: "settings", render: viewSettings },
@@ -487,6 +489,7 @@ function activityEvents(limit) {
         let text = `${cfg.name} ${r.conclusion === "success" ? "erfolgreich" : r.conclusion === "cancelled" ? "abgebrochen" : "FEHLGESCHLAGEN"}`;
         if (res && res.totals) text += ` · ${res.totals.candidates} Werbung, ${res.totals.flagged} auffällig`;
         else if (res && res.title) text += ` · ${res.type === "event" ? "Termin" : "Aufgabe"}: ${res.title}`;
+        else if (res && res.verlauf) text += ` · ${res.tag}: ${res.status}`;
         ev.push({ t: new Date(r.updated_at), color: r.conclusion === "success" ? "green" : "red", text, url: r.html_url });
       } else {
         ev.push({ t: new Date(r.updated_at), color: "cyan", text: `${cfg.name} läuft …`, url: r.html_url });
@@ -653,6 +656,11 @@ function viewOverview() {
   for (const c of act) {
     const st = agentStatus(c);
     if (["fail", "late"].includes(st.key)) alerts.push(h("div", { class: `notice${st.key === "fail" ? " err" : ""}` }, `${c.name}: ${st.label}${st.detail ? ` · ${st.detail}` : ""}${state.agentErrors[c.id] ? ` (${state.agentErrors[c.id]})` : ""}`));
+  }
+  const schank = resultsFor("schank")[0];
+  if (schank && schank.status === "AUFFÄLLIG" && !SCHANK_NOTES[schank.tag]) {
+    alerts.push(h("div", { class: "notice err" }, `Brezn Schank ${schank.tag}: auffällig · ${(schank.auffaellig || [])[0] || ""} `,
+      h("button", { class: "link", onclick: () => { location.hash = "/schank"; } }, "Ansehen", icon("arrow"))));
   }
 
   return [
@@ -993,6 +1001,158 @@ function viewDiktate() {
             ? (r.link ? h("a", { href: r.link, target: "_blank", rel: "noopener noreferrer" }, "öffnen ↗") : h("span", { class: "tag c-green" }, "angelegt"))
             : [h("span", { class: "tag c-red" }, "Fehler"), " ", h("span", { class: "muted" }, r.error || "")])))))) :
         h("div", { class: "empty" }, "Noch keine Diktate. Die Einträge werden 14 Tage aufbewahrt und danach automatisch gelöscht.")),
+  ];
+}
+
+// ---------- Schank (Brezn) ----------
+const SCHANK_WARN_L = 8, SCHANK_WARN_P = 20; // wie in smartschank.py
+const nf = (x, d = 1) => Number(x || 0).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+const eur = (x) => Number(x || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const schankFlag = (z, k) => z - k >= SCHANK_WARN_L && (z ? ((z - k) / z) * 100 : 0) >= SCHANK_WARN_P;
+const PRICE_KEY = "jarvis-schank-preise";
+function schankPrices() {
+  try { return { hell: 4.9, wb: 5.2, ...JSON.parse(localStorage.getItem(PRICE_KEY) || "{}") }; } catch { return { hell: 4.9, wb: 5.2 }; }
+}
+function saveSchankPrices(p) { try { localStorage.setItem(PRICE_KEY, JSON.stringify(p)); } catch {} }
+
+function schankChart(days, selected, onSelect) {
+  const series = [
+    { key: "hell", label: "Helles", color: "#f5b73b", z: "hell_zapf", k: "hell_kasse" },
+    { key: "wb", label: "Weißbier", color: "#38c8f0", z: "wb_zapf", k: "wb_kasse" },
+  ];
+  const diffs = days.flatMap((d) => series.map((sr) => d[sr.z] - d[sr.k]));
+  const top = Math.max(10, Math.ceil(Math.max(...diffs) / 10) * 10);
+  const bottom = Math.min(-5, Math.floor(Math.min(...diffs) / 5) * 5);
+  const wrap = h("div", { class: "chart-wrap" });
+  let drawnW = 0;
+  const draw = (W) => { drawnW = W; wrap.replaceChildren(...build(W, W < 520 ? 230 : 280)); };
+  new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w > 0 && Math.abs(w - drawnW) > 4) draw(w); }).observe(wrap);
+  draw(860);
+
+  function build(W, H) {
+    const L = 40, R = 8, T = 22, B = 30;
+    const band = (W - L - R) / days.length, bw = Math.max(3, Math.min(18, band * 0.32));
+    const Y = (v) => T + (H - T - B) * ((top - v) / (top - bottom));
+    const svg = s("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Nicht gebontes Bier pro Tag" });
+    const step = (top - bottom) / 5 >= 10 ? 10 : 5;
+    for (let v = bottom; v <= top; v += step) {
+      svg.append(s("line", { class: v === 0 ? "zero" : "grid", x1: L, x2: W - R, y1: Y(v), y2: Y(v) }),
+        s("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end" }, `${v}`));
+    }
+    const labelEvery = W < 520 ? 3 : days.length > 14 ? 2 : 1;
+    days.forEach((d, i) => {
+      const x0 = L + i * band, cx = x0 + band / 2;
+      if (d.tag === selected) svg.append(s("rect", { class: "sel-band", x: x0 + 1, y: T - 16, width: band - 2, height: H - B - T + 16, rx: 6 }));
+      const note = SCHANK_NOTES[d.tag];
+      series.forEach((sr, j) => {
+        const v = d[sr.z] - d[sr.k];
+        const flagged = schankFlag(d[sr.z], d[sr.k]);
+        const x = cx + (j === 0 ? -bw - 1 : 1);
+        svg.append(s("rect", {
+          x, y: Math.min(Y(v), Y(0)), width: bw, height: Math.max(1, Math.abs(Y(v) - Y(0))), rx: 2,
+          fill: flagged ? (note ? "#8a6d74" : "#f0616d") : sr.color, "fill-opacity": note ? ".55" : ".9",
+        }));
+      });
+      if (note) svg.append(s("text", { class: "note-mark", x: cx, y: T - 6, "text-anchor": "middle" }, "Reinigung"));
+      else if (series.some((sr) => schankFlag(d[sr.z], d[sr.k]))) svg.append(s("text", { class: "warn-mark", x: cx, y: T - 6, "text-anchor": "middle" }, "!"));
+      if ((days.length - 1 - i) % labelEvery === 0) svg.append(s("text", { x: cx, y: H - 8, "text-anchor": "middle" }, d.tag.slice(0, 6)));
+    });
+    const tip = h("div", { class: "chart-tip hidden" });
+    const idxAt = (e) => {
+      const box = svg.getBoundingClientRect();
+      const vx = ((e.clientX - box.left) / box.width) * W;
+      return Math.max(0, Math.min(days.length - 1, Math.floor((vx - L) / band)));
+    };
+    svg.addEventListener("pointermove", (e) => {
+      const d = days[idxAt(e)];
+      tip.replaceChildren(h("div", { class: "muted" }, d.tag, SCHANK_NOTES[d.tag] ? ` · ${SCHANK_NOTES[d.tag]}` : ""),
+        series.map((sr) => h("div", {}, h("span", { style: { color: sr.color } }, "● "),
+          `${sr.label}: ${nf(d[sr.z])} l gezapft, ${nf(d[sr.k])} l gebont (${d[sr.z] - d[sr.k] >= 0 ? "+" : ""}${nf(d[sr.z] - d[sr.k])} l)`)));
+      tip.classList.remove("hidden");
+      const box = svg.getBoundingClientRect();
+      Object.assign(tip.style, { left: `${((L + idxAt(e) * band + band / 2) / W) * box.width}px`, top: `${(T / H) * box.height}px` });
+    });
+    svg.addEventListener("pointerleave", () => tip.classList.add("hidden"));
+    svg.addEventListener("click", (e) => onSelect(days[idxAt(e)].tag));
+    svg.style.cursor = "pointer";
+    return [svg, tip];
+  }
+  return wrap;
+}
+
+function viewSchank() {
+  const cfg = AGENTS.find((a) => a.id === "schank");
+  const res = resultsFor("schank")[0];
+  const running = cfg && agentStatus(cfg).key === "running";
+  const startBtn = cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("send"), running ? "Erstellt …" : "Bericht jetzt mailen") : null;
+  if (!res || !res.verlauf || !res.verlauf.length) {
+    return [cfg && state.agentErrors[cfg.id] ? h("div", { class: "notice err" }, state.agentErrors[cfg.id]) : null,
+      h("div", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", {}, "Schankbericht"), startBtn),
+        h("div", { class: "empty" }, "Noch kein Bericht. Der erste Lauf liefert die Daten."))];
+  }
+  const days = res.verlauf;
+  if (!days.some((d) => d.tag === state.ui.schankDay)) state.ui.schankDay = days[days.length - 1].tag;
+  const d = days.find((x) => x.tag === state.ui.schankDay);
+  const isLatest = d.tag === res.tag;
+  const flagged = [schankFlag(d.hell_zapf, d.hell_kasse), schankFlag(d.wb_zapf, d.wb_kasse)];
+  const note = SCHANK_NOTES[d.tag];
+  const dayStatus = note ? ["Geklärt", "amber"] : flagged.some(Boolean) ? ["Auffällig", "red"] : ["OK", "green"];
+  const diffTxt = (z, k) => `${z - k >= 0 ? "+" : ""}${nf(z - k)} l`;
+
+  // Schwund-Rechner
+  const prices = schankPrices();
+  if (state.ui.schankSkipNotes === undefined) state.ui.schankSkipNotes = true;
+  const counted = days.filter((x) => !(state.ui.schankSkipNotes && SCHANK_NOTES[x.tag]));
+  const lossL = (zk, kk) => counted.reduce((a, x) => a + Math.max(0, x[zk] - x[kk]), 0);
+  const hellL = lossL("hell_zapf", "hell_kasse"), wbL = lossL("wb_zapf", "wb_kasse");
+  const hellE = (hellL / 0.5) * prices.hell, wbE = (wbL / 0.5) * prices.wb;
+  const priceInput = (key, label) => h("label", { class: "price" }, label,
+    h("input", { type: "number", min: "0", step: "0.1", value: String(prices[key]), inputmode: "decimal",
+      onchange: (e) => { const v = parseFloat(String(e.target.value).replace(",", ".")); if (v >= 0) { saveSchankPrices({ ...prices, [key]: v }); render(); } } }), "€");
+
+  const kv = [
+    ["Helles", `${nf(d.hell_zapf)} l gezapft · ${nf(d.hell_kasse)} l gebont · ${diffTxt(d.hell_zapf, d.hell_kasse)}`, flagged[0]],
+    ["Weißbier", `${nf(d.wb_zapf)} l gezapft · ${nf(d.wb_kasse)} l gebont · ${diffTxt(d.wb_zapf, d.wb_kasse)}`, flagged[1]],
+    ["Gesamt (inkl. Wasser/Schorle)", `${nf(d.zapf_gesamt)} l gezapft · ${nf(d.kasse_gesamt)} l gebont`, false],
+    ["Hausbuchungen", `${d.haus_anzahl} Getränke · ${nf(d.haus_liter)} l`, false],
+    ["Fasswechsel-Warnungen", String(d.fasswarnungen), false],
+    ["Kassenkopplung", `${d.kredite_ungenutzt} von ${d.kredite} Kassenkrediten ungenutzt`, d.kredite && d.kredite_ungenutzt >= 0.8 * d.kredite],
+  ];
+
+  return [
+    cfg && state.agentErrors[cfg.id] ? h("div", { class: "notice err" }, state.agentErrors[cfg.id]) : null,
+    h("div", { class: "stats" },
+      statCard("beer", dayStatus[1], `Status ${d.tag.slice(0, 6)}`, dayStatus[0], note ? "Reinigung" : isLatest ? "letzter Bericht" : ""),
+      statCard("trend", flagged[0] ? "red" : "amber", "Helles nicht gebont", nf(d.hell_zapf - d.hell_kasse), "Liter"),
+      statCard("trend", flagged[1] ? "red" : "cyan", "Weißbier nicht gebont", nf(d.wb_zapf - d.wb_kasse), "Liter"),
+      statCard("inbox", "violet", "Hausbuchungen", String(d.haus_anzahl), `${nf(d.haus_liter)} l`)),
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" }, h("h2", {}, `Zapfhahn gegen Kasse · ${days.length} Tage`),
+        h("div", { class: "head-actions" }, h("span", { class: "muted small" }, `Stand ${fShort.format(new Date(res.finished_at)).replace(",", "")}`), startBtn)),
+      h("div", { class: "legend" },
+        h("span", {}, h("span", { class: "dot amber" }), "Helles"), h("span", {}, h("span", { class: "dot cyan" }), "Weißbier"),
+        h("span", {}, h("span", { class: "dot red" }), `auffällig (≥ ${SCHANK_WARN_L} l und ≥ ${SCHANK_WARN_P} %)`),
+        h("span", { class: "muted" }, "Balken = Liter mehr gezapft als gebont · Tag anklicken für Details")),
+      schankChart(days, d.tag, (tag) => { state.ui.schankDay = tag; render(); })),
+    h("div", { class: "row-3" },
+      h("div", { class: "panel" },
+        h("div", { class: "panel-head" }, h("h2", {}, `Tag ${d.tag}`), h("span", { class: `tag c-${dayStatus[1]}` }, dayStatus[0])),
+        note ? h("div", { class: "notice" }, `Geklärt: ${note}`) : null,
+        h("dl", { class: "kv" }, kv.map(([k, v, bad]) => [h("dt", {}, k), h("dd", { class: bad ? "c-red" : "" }, v)])),
+        isLatest && res.haus_top && res.haus_top.length ? h("p", { class: "muted small" }, `Hausbuchungen meist: ${res.haus_top.map(([a, n]) => `${n}× ${a}`).join(", ")}`) : null,
+        isLatest && res.auffaellig && res.auffaellig.length ? h("ul", { class: "flag-list" }, res.auffaellig.map((a) => h("li", {}, a))) : null),
+      h("div", { class: "panel" },
+        h("div", { class: "panel-head" }, h("h2", {}, "Schwund-Rechner")),
+        h("p", { class: "muted small" }, `Was das mehr gezapfte als gebonte Bier der letzten ${counted.length} Tage an der Kasse wert gewesen wäre. Preise pro 0,5 l, bleiben in diesem Browser gespeichert.`),
+        h("div", { class: "toolbar" }, priceInput("hell", "Helles 0,5 l"), priceInput("wb", "Weißbier 0,5 l")),
+        h("label", { class: "check-label" },
+          h("input", { type: "checkbox", checked: state.ui.schankSkipNotes, onchange: (e) => { state.ui.schankSkipNotes = e.target.checked; render(); } }),
+          "Geklärte Tage (Reinigung) ausklammern"),
+        h("div", { class: "loss" },
+          h("div", {}, h("div", { class: "muted small" }, "Helles"), h("div", { class: "loss-val c-amber" }, eur(hellE)), h("div", { class: "muted small" }, `${nf(hellL)} l · ${Math.round(hellL / 0.5)} Halbe`)),
+          h("div", {}, h("div", { class: "muted small" }, "Weißbier"), h("div", { class: "loss-val c-cyan" }, eur(wbE)), h("div", { class: "muted small" }, `${nf(wbL)} l · ${Math.round(wbL / 0.5)} Halbe`)),
+          h("div", {}, h("div", { class: "muted small" }, "Zusammen"), h("div", { class: "loss-val" }, eur(hellE + wbE)), h("div", { class: "muted small" }, `≈ ${eur(((hellE + wbE) / Math.max(1, counted.length)) * 30)} im Monat`))),
+        h("p", { class: "muted small" }, "Schaum, Anstich und Fasswechsel machen immer ein paar Prozent aus. Tage, an denen mehr gebont als gezapft wurde, zählen als 0."))),
   ];
 }
 
