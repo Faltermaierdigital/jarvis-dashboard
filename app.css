@@ -162,6 +162,7 @@ a:hover { text-decoration: underline; }
 .status.fail { color: var(--red); background: rgba(240,97,109,.08); }
 .status.late { color: var(--amber); background: rgba(245,183,59,.08); }
 .status.planned { color: var(--dim); background: rgba(91,107,132,.08); }
+.status.local { color: var(--amber); background: rgba(245,183,59,.08); }
 .status .dot { width: 7px; height: 7px; box-shadow: none; background: currentColor; }
 .bar { height: 7px; border-radius: 4px; background: #1a2941; overflow: hidden; position: relative; }
 .bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--cyan); }
