@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=9";
-import * as gh from "./github.js?v=9";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=10";
+import * as gh from "./github.js?v=10";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -72,6 +72,7 @@ const ICONS = {
   external: ["M14 3h7v7", "M10 14 21 3", "M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"],
   mic: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", "M5 11a7 7 0 0 0 14 0", "M12 18v3M9 21h6"],
   send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
+  chat: ["M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z", "M8.5 12h.01M12 12h.01M15.5 12h.01"],
   grid: ["M4 4h16v16H4z", "M4 9h16M4 14h16M9 4v16M14 4v16"],
   beer: ["M6 8h10v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z", "M16 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2", "M6 8a3 3 0 0 1 3-4 3 3 0 0 1 5 1 2.5 2.5 0 0 1 2 3", "M9.5 12v6M12.5 12v6"],
 };
@@ -128,7 +129,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=9");
+      const { buildDemo } = await import("./demo.js?v=10");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -228,6 +229,7 @@ function agentStatus(cfg) {
   }
   if (last.conclusion === "success") {
     const res = state.results[last.id];
+    if (res && res.warnung) return { key: "late", label: "Mit Warnung", detail: res.warnung };
     if (res && res.totals) {
       const t = res.totals, parts = [];
       const skipped = t.accounts_total - t.accounts_ok;
@@ -458,6 +460,16 @@ function statusPill(st) {
   return h("span", { class: `status ${st.key}` }, h("span", { class: "dot" }), st.label);
 }
 
+// Beschreibung, bei Agents mit Stand-Meldung um die wichtigsten Zahlen ergaenzt.
+function agentDesc(cfg, st) {
+  if (st.detail) return `${cfg.description} · ${st.detail}`;
+  if (cfg.id !== "whatsapp") return cfg.description;
+  const res = resultsFor("whatsapp")[0];
+  if (!res || res.einwilligungen == null) return cfg.description;
+  const last = res.letzte_nachricht ? `letzte Nachricht ${fShort.format(new Date(res.letzte_nachricht))}` : "noch keine Nachricht";
+  return `${res.einwilligungen} Einwilligungen · ${res.wuensche_ab_heute} offene Wünsche · ${last}`;
+}
+
 function agentRow(cfg, detailed) {
   const st = agentStatus(cfg);
   const runs = state.runs[cfg.id] || [];
@@ -468,12 +480,13 @@ function agentRow(cfg, detailed) {
   const meta = cfg.status === "planned" || cfg.local ? cfg.note :
     last ? `${rate ? `${rate.ok}/${rate.total} ok` : "–"} · ${when(last.created_at)}` : "noch kein Lauf";
   const btn = cfg.status === "planned" ? h("button", { class: "btn", disabled: true }, icon("play"), "Starten") :
+    cfg.noStart ? h("button", { class: "btn", disabled: true, title: "Der Agent meldet sich selbst" }, cfg.noStart) :
     cfg.local ? h("button", { class: "btn", onclick: () => startLocal(cfg) }, icon("play"), "Starten") :
     cfg.input ? h("button", { class: "btn", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.button || "Senden") :
     h("button", { class: "btn", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Starten");
   return h("div", { class: "agent-row" },
     h("div", { class: `agent-ico c-${cfg.color}` }, icon(cfg.icon)),
-    h("div", {}, h("div", { class: "agent-name" }, cfg.name), h("div", { class: "agent-desc" }, detailed && state.agentErrors[cfg.id] ? state.agentErrors[cfg.id] : cfg.description)),
+    h("div", {}, h("div", { class: "agent-name" }, cfg.name), h("div", { class: "agent-desc" }, detailed && state.agentErrors[cfg.id] ? state.agentErrors[cfg.id] : agentDesc(cfg, st))),
     statusPill(st), h("div", { class: "agent-prog" }, bar, h("div", { class: "agent-meta" }, meta)), btn);
 }
 
@@ -708,14 +721,21 @@ function viewAgents() {
       ["Repo", h("a", { href: `https://github.com/${OWNER}/${cfg.repo}`, target: "_blank", rel: "noopener noreferrer" }, `${OWNER}/${cfg.repo}`)],
       ["Workflow", h("a", { href: `https://github.com/${OWNER}/${cfg.repo}/actions/workflows/${cfg.workflow}`, target: "_blank", rel: "noopener noreferrer" }, cfg.workflow)],
     ];
+    if (cfg.id === "whatsapp") {
+      const res = resultsFor("whatsapp")[0];
+      if (res && res.einwilligungen != null) rows.splice(2, 0,
+        ["Verbunden seit", res.verbunden_seit ? fShort.format(new Date(res.verbunden_seit)) : "–"],
+        ["Einwilligungen", `${res.einwilligungen}${res.per_codewort ? ` (davon ${res.per_codewort} per Codewort)` : ""}${res.nicht_zugeordnet ? ` · ${res.nicht_zugeordnet} ohne Konto` : ""}`]);
+    }
     if (state.agentErrors[cfg.id]) rows.push(["Fehler", state.agentErrors[cfg.id]]);
     return h("div", { class: "panel" },
       h("div", { class: "panel-head" },
         h("h2", {}, h("span", { class: `c-${cfg.color}` }, icon(cfg.icon, "inline-ico")), " ", cfg.name),
         statusPill(st)),
-      h("p", { class: "muted" }, cfg.description),
+      h("p", { class: "muted" }, agentDesc(cfg, st)),
       h("dl", { class: "kv" }, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
-      cfg.status === "planned" ? null : cfg.local ? h("div", { style: { marginTop: "16px" } },
+      cfg.status === "planned" ? null : cfg.noStart ? h("div", { style: { marginTop: "16px" } },
+        h("button", { class: "btn", disabled: true }, cfg.noStart)) : cfg.local ? h("div", { style: { marginTop: "16px" } },
         h("button", { class: "btn primary", onclick: () => startLocal(cfg) }, icon("play"), "Jetzt starten")) : h("div", { style: { marginTop: "16px" } },
         cfg.input ? h("button", { class: "btn primary", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.title) :
         h("button", { class: "btn primary", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Jetzt starten")));

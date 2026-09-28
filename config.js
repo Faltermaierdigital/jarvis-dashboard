@@ -9,6 +9,7 @@
 //   artifact    -> Name des Ergebnis-Artifacts (optional), result.json darin
 //   artifactFile-> anderer Dateiname im Artifact (Standard result.json)
 //   confirm     -> Text der Sicherheitsabfrage vor dem manuellen Start
+//   noStart     -> kein Start-Knopf (Text steht auf dem gesperrten Knopf)
 //   input       -> statt Sicherheitsabfrage ein Textfeld; der Text geht als
 //                  workflow_dispatch-Input "text" mit (plus source=dashboard)
 // Geplanter Agent: status: "planned" + note, dann ohne Start-Knopf.
@@ -105,6 +106,24 @@ export const AGENTS = [
     artifactFile: "smartschank_result.json",
     results: 1,
     confirm: "Der Schankbericht wird neu erstellt und an josef@hotel-faltermaier.de geschickt.",
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp-Mitleser",
+    description: "Liest „Küche Brez'n“ mit (nur mit Einwilligung) → Frei-Wünsche in Spalte K",
+    icon: "chat",
+    color: "green",
+    repo: "whatsapp-mitleser",
+    workflow: "status.yml",
+    ref: "main",
+    // Laeuft auf Josefs PC; der stuendliche Auswerter-Lauf dort meldet sich hier.
+    // Ist der PC aus, kommt keine Meldung: dann "Überfällig" (normal, wenn der PC aus ist).
+    schedule: { utcHours: [...Array(24).keys()], utcMinute: 5, label: "stündlich vom PC (wenn er an ist)" },
+    graceHours: 3,
+    artifact: "mitleser-result",
+    results: 1,
+    quiet: true,
+    noStart: "Läuft auf dem PC",   // kein Start-Knopf: ein Start hier haette keinen Stand vom PC
   },
   {
     id: "dienstplan-live",
