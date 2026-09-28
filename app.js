@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=10";
-import * as gh from "./github.js?v=10";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=11";
+import * as gh from "./github.js?v=11";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -129,7 +129,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=10");
+      const { buildDemo } = await import("./demo.js?v=11");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -542,7 +542,7 @@ function mailDays() {
   const byDay = new Map();
   for (const r of resultsFor("mailagent")) {
     const k = dayKey(new Date(r.finished_at));
-    if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, moved: 0, failed: 0, scanned: 0 }, cost: 0, hasCost: false });
+    if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, quarantined: 0, moved: 0, failed: 0, scanned: 0 }, cost: 0, hasCost: false });
     const d = byDay.get(k);
     d.runs.push(r);
     for (const f of Object.keys(d.totals)) d.totals[f] += (r.totals && r.totals[f]) || 0;
@@ -766,19 +766,20 @@ function viewMail() {
     h("option", { value: "" }, "Alle Postfächer"),
     res.accounts.map((a) => h("option", { value: a.account, selected: a.account === state.ui.account }, `${a.account} (${a.items.length})`)));
   const kindSel = h("select", { "aria-label": "Art", onchange: (e) => { state.ui.kind = e.target.value; render(); } },
-    [["", "Alle Arten"], ["ad", "Nur Werbung"], ["flagged", "Nur auffällig"], ["failed", "Nur Fehler"]]
+    [["", "Alle Arten"], ["ad", "Nur Werbung"], ["flagged", "Nur auffällig"], ["quarantined", "Nur Quarantäne"], ["failed", "Nur Fehler"]]
       .map(([v, l]) => h("option", { value: v, selected: v === state.ui.kind }, l)));
 
   const ACTION = {
     candidate: ["Kandidat (Testphase)", "c-cyan"], moved: ["In Papierkorb", "c-green"],
-    failed: ["Fehler", "c-red"], flagged: ["Auffällig", "c-violet"],
+    failed: ["Fehler", "c-red"], flagged: ["Auffällig", "c-violet"], quarantined: ["Quarantäne (Phishing)", "c-red"],
   };
   const rows = [];
   for (const a of res.accounts) {
     if (state.ui.account && a.account !== state.ui.account) continue;
     for (const it of a.items) {
       if (state.ui.kind === "ad" && !["candidate", "moved"].includes(it.action)) continue;
-      if (state.ui.kind && state.ui.kind !== "ad" && it.action !== state.ui.kind) continue;
+      if (state.ui.kind === "flagged" && !["flagged", "quarantined"].includes(it.action)) continue;
+      if (state.ui.kind && !["ad", "flagged"].includes(state.ui.kind) && it.action !== state.ui.kind) continue;
       const [label, cls] = ACTION[it.action] || [it.action, ""];
       rows.push(h("tr", {},
         h("td", { class: "nowrap" }, a.account),
@@ -795,7 +796,7 @@ function viewMail() {
   return [
     h("div", { class: "stats" },
       statCard("inbox", "amber", "Werbung erkannt", String(t.candidates), res.live_mode ? `${t.moved} verschoben` : "Testphase"),
-      statCard("zap", "violet", "Auffällig", String(t.flagged), "nicht gelöscht"),
+      statCard("zap", "violet", "Auffällig", String(t.flagged), t.quarantined ? `${t.quarantined} in Quarantäne` : "nicht gelöscht"),
       statCard("check", t.accounts_ok === t.accounts_total ? "green" : "red", "Postfächer ok", `${t.accounts_ok} / ${t.accounts_total}`, "letzter Lauf"),
       statCard("pulse", "cyan", "Claude-Kosten", week.length ? `${cost7.toFixed(2).replace(".", ",")} $` : "–", week.length ? `${week.length} Tag${week.length > 1 ? "e" : ""}` : "noch keine Daten")),
     res.live_mode ? null : h("div", { class: "notice" }, `Testphase: Es wird nichts verschoben, nur gemeldet. Live ab ${fDay.format(new Date(res.live_mode_from || "2026-09-28"))}`),
