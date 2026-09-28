@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=11";
-import * as gh from "./github.js?v=11";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=12";
+import * as gh from "./github.js?v=12";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -129,7 +129,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=11");
+      const { buildDemo } = await import("./demo.js?v=12");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -742,6 +742,38 @@ function viewAgents() {
   });
 }
 
+// Endgueltiges Loeschen alter Mails in Quarantaene oder Papierkorb - nur auf Josefs
+// Klick mit Rueckfrage (Workflow quarantine-cleanup.yml im Repo claude-mailagent).
+async function cleanupFolder(kind, count) {
+  const label = kind === "quarantaene" ? "Quarantäne" : "Papierkorb";
+  const ok = await confirmDialog(`${label} endgültig leeren?`,
+    `${count} Mail${count === 1 ? "" : "s"} aus dem ${label} aller Postfächer, älter als 14 Tage, werden endgültig gelöscht. ` +
+    "Das lässt sich nicht rückgängig machen. Jüngere Mails bleiben liegen.", "Ja, endgültig löschen");
+  if (!ok) return;
+  if (DEMO) { toast("Demo-Modus: Es wurde nichts gelöscht."); return; }
+  try {
+    await gh.dispatch(OWNER, "claude-mailagent", "quarantine-cleanup.yml", "main", { ordner: kind, confirm: "LOESCHEN" });
+    toast(`${label} wird geleert. Die neuen Zahlen stehen nach dem nächsten Mailagent-Lauf hier.`);
+  } catch (e) {
+    toast(`Löschen fehlgeschlagen: ${e.message}`, true);
+  }
+}
+
+function cleanupPanel(latest) {
+  const t = latest.totals || {};
+  if (t.quarantine_total == null && t.trash_total == null) return null;
+  const btn = (kind, n) => h("button", { class: "btn", disabled: !n, onclick: () => cleanupFolder(kind, n) },
+    icon("zap"), n ? `${n} löschen` : "nichts älter als 14 Tage");
+  return h("div", { class: "panel" },
+    h("div", { class: "panel-head" }, h("h2", {}, "Aufräumen"),
+      h("span", { class: "muted small" }, `Stand ${fShort.format(new Date(latest.finished_at))} · endgültig, nur auf deinen Klick`)),
+    h("dl", { class: "kv" },
+      h("dt", {}, "Quarantäne (Phishing)"),
+      h("dd", {}, `${t.quarantine_total || 0} Mails, davon ${t.quarantine_loeschbar || 0} älter als 14 Tage `, btn("quarantaene", t.quarantine_loeschbar || 0)),
+      h("dt", {}, "Papierkorb"),
+      h("dd", {}, `${t.trash_total || 0} Mails, davon ${t.trash_loeschbar || 0} älter als 14 Tage `, btn("papierkorb", t.trash_loeschbar || 0))));
+}
+
 function viewMail() {
   const results = resultsFor("mailagent");
   if (!results.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Ergebnisse vorhanden. Die Details werden 14 Tage aufbewahrt und danach automatisch gelöscht."));
@@ -800,6 +832,7 @@ function viewMail() {
       statCard("check", t.accounts_ok === t.accounts_total ? "green" : "red", "Postfächer ok", `${t.accounts_ok} / ${t.accounts_total}`, "letzter Lauf"),
       statCard("pulse", "cyan", "Claude-Kosten", week.length ? `${cost7.toFixed(2).replace(".", ",")} $` : "–", week.length ? `${week.length} Tag${week.length > 1 ? "e" : ""}` : "noch keine Daten")),
     res.live_mode ? null : h("div", { class: "notice" }, `Testphase: Es wird nichts verschoben, nur gemeldet. Live ab ${fDay.format(new Date(res.live_mode_from || "2026-09-28"))}`),
+    cleanupPanel(results[0]),
     h("div", { class: "panel" },
       h("div", { class: "toolbar" }, runSel, accSel, kindSel),
       rows.length ? h("div", { class: "table-wrap" }, h("table", {},

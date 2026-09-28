@@ -189,6 +189,7 @@ export function buildDemo(agents) {
           moved: 0,
           failed: 0,
           flagged: all.filter((i) => i.action === "flagged").length,
+          quarantine_total: 3, quarantine_loeschbar: 1, trash_total: 212, trash_loeschbar: 37,
         },
         accounts,
       };
