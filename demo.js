@@ -71,6 +71,16 @@ export function buildDemo(agents) {
         wochen: [week(0, "laufend", staff), week(1, "kommend", staff.map(([n, , u, ue]) => [n, ["", "", "", "", "", "", ""], u, ue]))] };
       continue;
     }
+    if (cfg.id === "sicherung") {
+      const t = new Date(now); t.setHours(5, 0, 0, 0);
+      if (t > now) t.setDate(t.getDate() - 1);
+      const run = { id: ++id, status: "completed", conclusion: "success", event: "workflow_dispatch", created_at: t.toISOString(),
+        run_started_at: t.toISOString(), updated_at: new Date(t.getTime() + 40000).toISOString(), html_url: "#demo" };
+      runs[cfg.id].push(run);
+      results[run.id] = { agent: "sicherung", ok: true, ausloeser: "Zeitplan", zeit: t.toISOString(), finished_at: run.updated_at, groesse_mb: 353.2,
+        eintraege: 1183, stick: true, stick_frei_gb: 116.1, stick_anzahl: 4, drive: true, drive_frei_gb: 14.2, fehler: [], warnung: null };
+      continue;
+    }
     if (cfg.id === "sync") {
       const t = new Date(now.getTime() - 40 * 60e3);
       const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),

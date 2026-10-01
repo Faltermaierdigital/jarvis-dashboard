@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=12";
-import * as gh from "./github.js?v=12";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=16";
+import * as gh from "./github.js?v=16";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -74,6 +74,7 @@ const ICONS = {
   send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
   chat: ["M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z", "M8.5 12h.01M12 12h.01M15.5 12h.01"],
   grid: ["M4 4h16v16H4z", "M4 9h16M4 14h16M9 4v16M14 4v16"],
+  shield: ["M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z", "m8.5 12 2.5 2.5 4.5-5"],
   beer: ["M6 8h10v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z", "M16 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2", "M6 8a3 3 0 0 1 3-4 3 3 0 0 1 5 1 2.5 2.5 0 0 1 2 3", "M9.5 12v6M12.5 12v6"],
 };
 function icon(name, cls) {
@@ -124,12 +125,24 @@ function startLocal(cfg) {
   toast("Jarvis-Starter aufgerufen: Chrome öffnet OpenTable und Tima. Einloggen, dann im Fenster auf OK.");
 }
 
+// GitHub-Agent mit PC-Knopf (localStart): der Knopf ruft den Jarvis-Starter auf,
+// der Status kommt trotzdem vom Workflow, an den sich der PC selbst meldet.
+function startLocalAction(cfg) {
+  if (DEMO) { toast("Demo-Modus: Der Jarvis-Starter wurde nicht aufgerufen."); return; }
+  window.location.href = cfg.localStart.url;
+  state.pending[cfg.id] = Date.now();
+  toast(cfg.localStart.toast || `${cfg.name} auf dem PC gestartet.`);
+  render();
+  clearTimeout(timer);
+  timer = setTimeout(load, 50000);
+}
+
 async function load() {
   if (state.loading) return;
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=12");
+      const { buildDemo } = await import("./demo.js?v=16");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -241,7 +254,7 @@ function agentStatus(cfg) {
   }
   if (last.conclusion === "cancelled") return { key: "late", label: "Abgebrochen" };
   const failRes = state.results[last.id];
-  return { key: "fail", label: "Fehlgeschlagen", detail: failRes && failRes.error ? failRes.error : "" };
+  return { key: "fail", label: "Fehlgeschlagen", detail: failRes && failRes.error ? failRes.error : failRes && failRes.fehler && failRes.fehler.length ? failRes.fehler.join(", ") : "" };
 }
 
 function successRate(cfg, days = 30) {
@@ -463,6 +476,12 @@ function statusPill(st) {
 // Beschreibung, bei Agents mit Stand-Meldung um die wichtigsten Zahlen ergaenzt.
 function agentDesc(cfg, st) {
   if (st.detail) return `${cfg.description} · ${st.detail}`;
+  if (cfg.id === "sicherung") {
+    const res = resultsFor("sicherung")[0];
+    if (!res || res.groesse_mb == null) return cfg.description;
+    const frei = res.stick_frei_gb != null ? `Stick ${String(res.stick_frei_gb).replace(".", ",")} GB frei` : "Stick fehlt";
+    return `${String(res.groesse_mb).replace(".", ",")} MB · ${frei} · Drive ${res.drive ? "ok" : "fehlt"}`;
+  }
   if (cfg.id !== "whatsapp") return cfg.description;
   const res = resultsFor("whatsapp")[0];
   if (!res || res.einwilligungen == null) return cfg.description;
@@ -480,6 +499,7 @@ function agentRow(cfg, detailed) {
   const meta = cfg.status === "planned" || cfg.local ? cfg.note :
     last ? `${rate ? `${rate.ok}/${rate.total} ok` : "–"} · ${when(last.created_at)}` : "noch kein Lauf";
   const btn = cfg.status === "planned" ? h("button", { class: "btn", disabled: true }, icon("play"), "Starten") :
+    cfg.localStart ? h("button", { class: "btn", disabled: st.key === "running", onclick: () => startLocalAction(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : cfg.localStart.label) :
     cfg.noStart ? h("button", { class: "btn", disabled: true, title: "Der Agent meldet sich selbst" }, cfg.noStart) :
     cfg.local ? h("button", { class: "btn", onclick: () => startLocal(cfg) }, icon("play"), "Starten") :
     cfg.input ? h("button", { class: "btn", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.button || "Senden") :
@@ -727,6 +747,13 @@ function viewAgents() {
         ["Verbunden seit", res.verbunden_seit ? fShort.format(new Date(res.verbunden_seit)) : "–"],
         ["Einwilligungen", `${res.einwilligungen}${res.per_codewort ? ` (davon ${res.per_codewort} per Codewort)` : ""}${res.nicht_zugeordnet ? ` · ${res.nicht_zugeordnet} ohne Konto` : ""}`]);
     }
+    if (cfg.id === "sicherung") {
+      const res = resultsFor("sicherung")[0];
+      if (res && res.zeit) rows.splice(2, 0,
+        ["Letzte Sicherung", `${fShort.format(new Date(res.zeit))} · ${res.ausloeser || ""} · ${res.groesse_mb != null ? res.groesse_mb.toLocaleString("de-DE") : "–"} MB`],
+        ["USB-Stick D:", res.stick ? `ok · ${res.stick_anzahl} Sicherungen · ${res.stick_frei_gb.toLocaleString("de-DE")} GB frei` : "fehlt"],
+        ["Google Drive", res.drive ? `ok (Jarvis_aktuell.zip)${res.drive_frei_gb != null ? ` · ${res.drive_frei_gb.toLocaleString("de-DE")} GB frei` : ""}` : "fehlt"]);
+    }
     if (state.agentErrors[cfg.id]) rows.push(["Fehler", state.agentErrors[cfg.id]]);
     return h("div", { class: "panel" },
       h("div", { class: "panel-head" },
@@ -734,7 +761,8 @@ function viewAgents() {
         statusPill(st)),
       h("p", { class: "muted" }, agentDesc(cfg, st)),
       h("dl", { class: "kv" }, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
-      cfg.status === "planned" ? null : cfg.noStart ? h("div", { style: { marginTop: "16px" } },
+      cfg.status === "planned" ? null : cfg.localStart ? h("div", { style: { marginTop: "16px" } },
+        h("button", { class: "btn primary", disabled: st.key === "running", onclick: () => startLocalAction(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : cfg.localStart.label)) : cfg.noStart ? h("div", { style: { marginTop: "16px" } },
         h("button", { class: "btn", disabled: true }, cfg.noStart)) : cfg.local ? h("div", { style: { marginTop: "16px" } },
         h("button", { class: "btn primary", onclick: () => startLocal(cfg) }, icon("play"), "Jetzt starten")) : h("div", { style: { marginTop: "16px" } },
         cfg.input ? h("button", { class: "btn primary", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.title) :

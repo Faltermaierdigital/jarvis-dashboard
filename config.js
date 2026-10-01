@@ -10,6 +10,8 @@
 //   artifactFile-> anderer Dateiname im Artifact (Standard result.json)
 //   confirm     -> Text der Sicherheitsabfrage vor dem manuellen Start
 //   noStart     -> kein Start-Knopf (Text steht auf dem gesperrten Knopf)
+//   localStart  -> { url: "jarvis://<aktion>", label, toast }: Start-Knopf ruft den
+//                  Jarvis-Starter auf Josefs PC auf, Status kommt trotzdem vom Workflow
 //   input       -> statt Sicherheitsabfrage ein Textfeld; der Text geht als
 //                  workflow_dispatch-Input "text" mit (plus source=dashboard)
 // Geplanter Agent: status: "planned" + note, dann ohne Start-Knopf.
@@ -124,6 +126,24 @@ export const AGENTS = [
     results: 1,
     quiet: true,
     noStart: "Läuft auf dem PC",   // kein Start-Knopf: ein Start hier haette keinen Stand vom PC
+  },
+  {
+    id: "sicherung",
+    name: "Datensicherung",
+    description: "Vault + Jarvis-Gedächtnis → USB-Stick D: und Google Drive",
+    icon: "shield",
+    color: "cyan",
+    repo: "jarvis-sicherung",
+    workflow: "status.yml",
+    ref: "main",
+    // Laeuft auf Josefs PC (Aufgabe "Jarvis Datensicherung", 5:00 Uhr = 3:00 UTC im
+    // Sommer, 4:00 UTC im Winter). War der PC aus, laeuft sie beim Einschalten nach.
+    schedule: { utcHours: [3], utcMinute: 0, label: "täglich 5:00 Uhr vom PC (läuft nach, wenn der PC aus war)" },
+    graceHours: 4,
+    artifact: "sicherung-result",
+    results: 1,
+    quiet: true,
+    localStart: { url: "jarvis://sichern", label: "Jetzt sichern", toast: "Sicherung läuft auf dem PC (ca. 1 Minute). Am Ende kommt dort ein Fenster mit dem Ergebnis." },
   },
   {
     id: "dienstplan-live",
