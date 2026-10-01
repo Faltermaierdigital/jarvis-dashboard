@@ -36,7 +36,7 @@ export const AGENTS = [
     repo: "claude-mailagent",
     workflow: "mailagent.yml",
     ref: "main",
-    schedule: { utcHours: [4, 6, 8, 10, 12, 14, 16, 18, 20], utcMinute: 10, label: "alle 2 Std. von 6:10 bis 22:10 Uhr" },
+    schedule: { utcHours: [5, 6, 8, 10, 12, 14, 16, 18, 20], utcMinute: 10, label: "7:00, dann alle 2 Std. von 8:10 bis 22:10 Uhr" },
     results: 90,
     graceHours: 3,
     artifact: "mailagent-result",
