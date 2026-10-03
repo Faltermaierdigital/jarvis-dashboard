@@ -110,7 +110,7 @@ export const AGENTS = [
   {
     id: "whatsapp",
     name: "WhatsApp-Mitleser",
-    description: "Liest „Küche Brez'n“ mit (nur mit Einwilligung) → Frei-Wünsche in Spalte K",
+    description: "Liest „Küche Brez'n“ mit (nur mit Einwilligung) → Frei-Wünsche direkt in den Dienstplan",
     icon: "chat",
     color: "green",
     repo: "whatsapp-mitleser",
