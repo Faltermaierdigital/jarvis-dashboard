@@ -15,8 +15,6 @@
 //   input       -> statt Sicherheitsabfrage ein Textfeld; der Text geht als
 //                  workflow_dispatch-Input "text" mit (plus source=dashboard)
 // Geplanter Agent: status: "planned" + note, dann ohne Start-Knopf.
-// Lokaler Agent: local: "jarvis://<aktion>" - der Knopf ruft den Jarvis-Starter auf
-//   Josefs PC auf (C:\Users\admin\JarvisDashboard\jarvis-starter.ps1). Kein GitHub-Status.
 
 export const OWNER = "Faltermaierdigital";
 
@@ -144,14 +142,5 @@ export const AGENTS = [
     results: 1,
     quiet: true,
     localStart: { url: "jarvis://sichern", label: "Jetzt sichern", toast: "Sicherung läuft auf dem PC (ca. 1 Minute). Am Ende kommt dort ein Fenster mit dem Ergebnis." },
-  },
-  {
-    id: "dienstplan-live",
-    name: "Dienstplan live",
-    description: "OpenTable + Tima mit deinem Login → Reservierungen, Urlaub, Überstunden",
-    icon: "play",
-    color: "amber",
-    local: "jarvis://dienstplan",
-    note: "läuft auf deinem PC · Ergebnis danach unter Dienstplan",
   },
 ];

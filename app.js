@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=16";
-import * as gh from "./github.js?v=16";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=17";
+import * as gh from "./github.js?v=17";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -117,13 +117,7 @@ function ago(date) {
 }
 
 // ---------- Daten ----------
-const activeAgents = () => AGENTS.filter((a) => a.status !== "planned" && !a.local);
-// Lokale Agents laufen ueber den Jarvis-Starter auf Josefs PC (jarvis://-Link).
-function startLocal(cfg) {
-  if (DEMO) { toast("Demo-Modus: Der Jarvis-Starter wurde nicht aufgerufen."); return; }
-  window.location.href = cfg.local;
-  toast("Jarvis-Starter aufgerufen: Chrome öffnet OpenTable und Tima. Einloggen, dann im Fenster auf OK.");
-}
+const activeAgents = () => AGENTS.filter((a) => a.status !== "planned");
 
 // GitHub-Agent mit PC-Knopf (localStart): der Knopf ruft den Jarvis-Starter auf,
 // der Status kommt trotzdem vom Workflow, an den sich der PC selbst meldet.
@@ -142,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=16");
+      const { buildDemo } = await import("./demo.js?v=17");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -229,7 +223,6 @@ function lastExpected(cfg, now) {
 
 function agentStatus(cfg) {
   if (cfg.status === "planned") return { key: "planned", label: "Geplant" };
-  if (cfg.local) return { key: "local", label: "Auf dem PC" };
   if (state.pending[cfg.id]) return { key: "running", label: "Startet" };
   if (state.agentErrors[cfg.id]) return { key: "fail", label: "Keine Daten" };
   const runs = state.runs[cfg.id] || [];
@@ -493,15 +486,14 @@ function agentRow(cfg, detailed) {
   const st = agentStatus(cfg);
   const runs = state.runs[cfg.id] || [];
   const last = runs[0];
-  const rate = cfg.status === "planned" || cfg.local ? null : successRate(cfg);
+  const rate = cfg.status === "planned" ? null : successRate(cfg);
   const bar = h("div", { class: `bar ${cfg.color === "violet" ? "violet" : ""} ${st.key === "running" ? "indet" : ""}`, title: rate ? `Erfolgsquote 30 Tage: ${rate.ok}/${rate.total}` : "" },
     h("i", { style: { width: st.key === "running" ? null : `${rate ? Math.round((rate.ok / rate.total) * 100) : 0}%` } }));
-  const meta = cfg.status === "planned" || cfg.local ? cfg.note :
+  const meta = cfg.status === "planned" ? cfg.note :
     last ? `${rate ? `${rate.ok}/${rate.total} ok` : "–"} · ${when(last.created_at)}` : "noch kein Lauf";
   const btn = cfg.status === "planned" ? h("button", { class: "btn", disabled: true }, icon("play"), "Starten") :
     cfg.localStart ? h("button", { class: "btn", disabled: st.key === "running", onclick: () => startLocalAction(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : cfg.localStart.label) :
     cfg.noStart ? h("button", { class: "btn", disabled: true, title: "Der Agent meldet sich selbst" }, cfg.noStart) :
-    cfg.local ? h("button", { class: "btn", onclick: () => startLocal(cfg) }, icon("play"), "Starten") :
     cfg.input ? h("button", { class: "btn", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.button || "Senden") :
     h("button", { class: "btn", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Starten");
   return h("div", { class: "agent-row" },
@@ -733,8 +725,8 @@ function viewAgents() {
   return AGENTS.map((cfg) => {
     const st = agentStatus(cfg);
     const last = (state.runs[cfg.id] || [])[0];
-    const rate = cfg.status === "planned" || cfg.local ? null : successRate(cfg);
-    const rows = cfg.status === "planned" ? [["Status", cfg.note]] : cfg.local ? [["Wo", cfg.note], ["Ablauf", "Knopf → Chrome öffnet OpenTable und Tima → du loggst dich ein → OK → Jarvis trägt alles ein und frischt den Dienstplan auf"]] : [
+    const rate = cfg.status === "planned" ? null : successRate(cfg);
+    const rows = cfg.status === "planned" ? [["Status", cfg.note]] : [
       ["Zeitplan", cfg.schedule ? cfg.schedule.label : "nur manuell"],
       ["Letzter Lauf", last ? `${when(last.created_at)} · ${last.status === "completed" ? duration(last) : "läuft"} · ${ago(new Date(last.created_at))}` : "–"],
       ["Erfolgsquote 30 Tage", rate ? `${rate.ok} von ${rate.total}` : "–"],
@@ -763,8 +755,7 @@ function viewAgents() {
       h("dl", { class: "kv" }, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
       cfg.status === "planned" ? null : cfg.localStart ? h("div", { style: { marginTop: "16px" } },
         h("button", { class: "btn primary", disabled: st.key === "running", onclick: () => startLocalAction(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : cfg.localStart.label)) : cfg.noStart ? h("div", { style: { marginTop: "16px" } },
-        h("button", { class: "btn", disabled: true }, cfg.noStart)) : cfg.local ? h("div", { style: { marginTop: "16px" } },
-        h("button", { class: "btn primary", onclick: () => startLocal(cfg) }, icon("play"), "Jetzt starten")) : h("div", { style: { marginTop: "16px" } },
+        h("button", { class: "btn", disabled: true }, cfg.noStart)) : h("div", { style: { marginTop: "16px" } },
         cfg.input ? h("button", { class: "btn primary", onclick: () => startAgent(cfg) }, icon("mic"), cfg.input.title) :
         h("button", { class: "btn primary", disabled: st.key === "running", onclick: () => startAgent(cfg) }, icon("play"), st.key === "running" ? "Läuft …" : "Jetzt starten")));
   });
@@ -1018,7 +1009,6 @@ function weekDates(woche) {
 function viewDienstplan() {
   const snap = resultsFor("dienstplan")[0];
   const cfg = AGENTS.find((a) => a.id === "dienstplan");
-  const live = AGENTS.find((a) => a.id === "dienstplan-live");
   const running = cfg && agentStatus(cfg).key === "running";
   const notices = [];
   if (cfg && state.agentErrors[cfg.id]) notices.push(h("div", { class: "notice err" }, state.agentErrors[cfg.id]));
@@ -1068,8 +1058,7 @@ function viewDienstplan() {
         h("div", { class: "head-actions" },
           h("span", { class: "muted small" }, `Stand ${fHM.format(new Date(snap.finished_at))}`),
           h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Im Sheet öffnen"),
-          cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("refresh"), running ? "Gleicht ab …" : "Jetzt abgleichen") : null,
-          live ? h("button", { class: "btn primary", onclick: () => startLocal(live) }, icon("play"), "Live-Daten (OpenTable + Tima)") : null)),
+          cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("refresh"), running ? "Gleicht ab …" : "Jetzt abgleichen") : null)),
       h("div", { class: "table-wrap plan-wrap" }, table),
       h("div", { class: "legend plan-legend" },
         h("span", {}, h("span", { class: "sc sc-work" }, "17:00"), " Schichtbeginn"),
