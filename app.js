@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=17";
-import * as gh from "./github.js?v=17";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=18";
+import * as gh from "./github.js?v=18";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=17");
+      const { buildDemo } = await import("./demo.js?v=18");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -554,11 +554,10 @@ function mailDays() {
   const byDay = new Map();
   for (const r of resultsFor("mailagent")) {
     const k = dayKey(new Date(r.finished_at));
-    if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, quarantined: 0, moved: 0, failed: 0, scanned: 0 }, cost: 0, hasCost: false });
+    if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, quarantined: 0, moved: 0, failed: 0, scanned: 0 } });
     const d = byDay.get(k);
     d.runs.push(r);
     for (const f of Object.keys(d.totals)) d.totals[f] += (r.totals && r.totals[f]) || 0;
-    if (r.usage && typeof r.usage.cost_usd === "number") { d.cost += r.usage.cost_usd; d.hasCost = true; }
   }
   return byDay;
 }
@@ -841,15 +840,16 @@ function viewMail() {
     }
   }
   const t = { ...day.totals, accounts_ok: latest.totals.accounts_ok, accounts_total: latest.totals.accounts_total };
-  const weekAgo = Date.now() - 7 * 864e5;
-  const week = days.filter((d) => new Date(`${d.key}T12:00:00`) >= weekAgo && d.hasCost);
-  const cost7 = week.reduce((s, d) => s + d.cost, 0);
+  // Gesamtkosten aller Claude-Agenten (Admin-API cost_report, Agent "kosten"), nicht nur Mail.
+  const kosten = resultsFor("kosten")[0];
+  const usd = (x) => `${Number(x).toFixed(2).replace(".", ",")} $`;
   return [
     h("div", { class: "stats" },
       statCard("inbox", "amber", "Werbung erkannt", String(t.candidates), res.live_mode ? `${t.moved} verschoben` : "Testphase"),
       statCard("zap", "violet", "Auffällig", String(t.flagged), t.quarantined ? `${t.quarantined} in Quarantäne` : "nicht gelöscht"),
       statCard("check", t.accounts_ok === t.accounts_total ? "green" : "red", "Postfächer ok", `${t.accounts_ok} / ${t.accounts_total}`, "letzter Lauf"),
-      statCard("pulse", "cyan", "Claude-Kosten", week.length ? `${cost7.toFixed(2).replace(".", ",")} $` : "–", week.length ? `${week.length} Tag${week.length > 1 ? "e" : ""}` : "noch keine Daten")),
+      statCard("pulse", "cyan", "Claude-Kosten gesamt · 7 Tage", kosten && kosten.ok ? usd(kosten.sieben_tage_usd) : "–",
+        kosten && kosten.ok ? `Monat ${usd(kosten.monat_usd)} · heute ${usd(kosten.heute_usd)}` : kosten && kosten.error ? kosten.error : "noch keine Daten")),
     res.live_mode ? null : h("div", { class: "notice" }, `Testphase: Es wird nichts verschoben, nur gemeldet. Live ab ${fDay.format(new Date(res.live_mode_from || "2026-09-28"))}`),
     cleanupPanel(results[0]),
     h("div", { class: "panel" },

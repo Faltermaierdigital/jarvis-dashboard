@@ -81,6 +81,15 @@ export function buildDemo(agents) {
         eintraege: 1183, stick: true, stick_frei_gb: 116.1, stick_anzahl: 4, drive: true, drive_frei_gb: 14.2, fehler: [], warnung: null };
       continue;
     }
+    if (cfg.id === "kosten") {
+      const t = new Date(now.getTime() - 50 * 60e3);
+      const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),
+        run_started_at: t.toISOString(), updated_at: new Date(t.getTime() + 15000).toISOString(), html_url: "#demo" };
+      runs[cfg.id].push(run);
+      results[run.id] = { agent: "kosten", ok: true, error: null, finished_at: run.updated_at, waehrung: "USD",
+        heute_usd: 0.42, sieben_tage_usd: 6.18, monat_usd: 4.9, monat: now.toISOString().slice(0, 7), tage: [] };
+      continue;
+    }
     if (cfg.id === "sync") {
       const t = new Date(now.getTime() - 40 * 60e3);
       const run = { id: ++id, status: "completed", conclusion: "success", event: "schedule", created_at: t.toISOString(),
