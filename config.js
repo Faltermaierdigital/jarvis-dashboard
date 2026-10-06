@@ -110,18 +110,19 @@ export const AGENTS = [
   {
     id: "kosten",
     name: "Claude-Kosten",
-    description: "Gesamtverbrauch aller Claude-Agenten (Admin-API)",
+    description: "Gesamtverbrauch aller Claude-Agenten (vom PC gesammelt)",
     icon: "pulse",
     color: "cyan",
     repo: "claude-mailagent",
     workflow: "claude-kosten.yml",
     ref: "main",
-    schedule: { utcHours: [0, 6, 12, 18], utcMinute: 40, label: "alle 6 Std." },
+    // Laeuft auf Josefs PC (Aufgabe "Jarvis Claude-Kosten", kosten_sammeln.py), meldet sich hier.
+    schedule: { utcHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22], utcMinute: 50, label: "alle 2 Std. vom PC (wenn er an ist)" },
     graceHours: 3,
     artifact: "kosten-result",
     results: 1,
     quiet: true,
-    confirm: false,
+    noStart: "Läuft auf dem PC",
   },
   {
     id: "whatsapp",
