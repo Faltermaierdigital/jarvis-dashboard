@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=19";
-import * as gh from "./github.js?v=19";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=20";
+import * as gh from "./github.js?v=20";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=19");
+      const { buildDemo } = await import("./demo.js?v=20");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -680,8 +680,9 @@ function mailboxRing() {
 }
 
 // ---------- Seiten ----------
-// Reservierungen heute und morgen: Zahlen aus den Zeilen "Reservierung
+// Reservierungen heute und die 6 Tage danach: Zahlen aus den Zeilen "Reservierung
 // Mittag/Abend" des Dienstplan-Abgleichs (OpenTable schreibt sie ins Sheet).
+const fWdShort = fmt({ weekday: "short" });
 function reservationsPanel() {
   const snap = resultsFor("dienstplan")[0];
   if (!snap) return null;
@@ -694,22 +695,23 @@ function reservationsPanel() {
     return null;
   };
   const num = (v) => (v == null || String(v).trim() === "" ? "–" : String(v).trim());
-  const col = (label, key) => {
+  const col = (offset) => {
+    const key = dayKey(new Date(Date.now() + offset * 864e5));
+    const [, m, d] = key.split("-");
+    const name = offset === 0 ? "Heute" : offset === 1 ? "Morgen" : fWdShort.format(new Date(`${key}T12:00:00`)).replace(".", "");
     const r = lookup(key);
-    return h("div", { class: "res-day" },
-      h("div", { class: "day-label" }, `${label} · ${fWeekday.format(new Date(`${key}T12:00:00`))}`),
-      r ? h("div", { class: "res-vals" },
-        h("div", { class: "res-val" }, h("span", { class: "muted" }, "Mittag"), h("b", {}, num(r.mittag))),
-        h("div", { class: "res-val" }, h("span", { class: "muted" }, "Abend"), h("b", {}, num(r.abend))))
-        : h("div", { class: "muted" }, "nicht im Plan"));
+    return h("div", { class: `res-day${offset === 0 ? " today" : ""}` },
+      h("div", { class: "day-label" }, name, h("span", {}, ` ${d}.${m}.`)),
+      r ? [h("div", { class: "res-val" }, h("span", { class: "muted" }, "Mittag"), h("b", {}, num(r.mittag))),
+        h("div", { class: "res-val" }, h("span", { class: "muted" }, "Abend"), h("b", {}, num(r.abend)))]
+        : h("div", { class: "muted small" }, "nicht im Plan"));
   };
   return h("div", { class: "panel res" },
-    h("div", { class: "panel-head" }, h("h2", {}, "Reservierungen"),
+    h("div", { class: "panel-head" }, h("h2", {}, "Reservierungen · 7 Tage"),
       h("div", { class: "head-actions" },
         h("span", { class: "muted small" }, `Stand ${(dayKey(new Date(snap.finished_at)) === dayKey(new Date()) ? fHM : fShort).format(new Date(snap.finished_at)).replace(",", "")}`),
         h("button", { class: "link", onclick: () => { location.hash = "/dienstplan"; } }, "Dienstplan", icon("arrow")))),
-    h("div", { class: "res-days" },
-      col("Heute", dayKey(new Date())), col("Morgen", dayKey(new Date(Date.now() + 864e5)))));
+    h("div", { class: "res-days" }, [0, 1, 2, 3, 4, 5, 6].map(col)));
 }
 
 function viewOverview() {
