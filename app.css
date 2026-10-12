@@ -314,6 +314,12 @@ input[type=number] {
 .flag-list { margin: 10px 0 0; padding-left: 18px; color: #ffb9bf; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .kv dd.c-red { color: var(--red); }
 
+/* ---------- Reservierungen heute/morgen (Uebersicht) ---------- */
+.res-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.res-vals { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+.res-val { display: flex; align-items: baseline; gap: 8px; }
+.res-val b { font-size: 28px; font-weight: 500; line-height: 1.15; color: var(--text); }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1180px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=18";
-import * as gh from "./github.js?v=18";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=19";
+import * as gh from "./github.js?v=19";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=18");
+      const { buildDemo } = await import("./demo.js?v=19");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -680,6 +680,38 @@ function mailboxRing() {
 }
 
 // ---------- Seiten ----------
+// Reservierungen heute und morgen: Zahlen aus den Zeilen "Reservierung
+// Mittag/Abend" des Dienstplan-Abgleichs (OpenTable schreibt sie ins Sheet).
+function reservationsPanel() {
+  const snap = resultsFor("dienstplan")[0];
+  if (!snap) return null;
+  const lookup = (key) => {
+    const [, m, d] = key.split("-");
+    for (const w of snap.wochen || []) {
+      const i = weekDates(w.woche).indexOf(`${d}.${m}.`);
+      if (i >= 0) return { mittag: (w.reservierung_mittag || [])[i], abend: (w.reservierung_abend || [])[i] };
+    }
+    return null;
+  };
+  const num = (v) => (v == null || String(v).trim() === "" ? "–" : String(v).trim());
+  const col = (label, key) => {
+    const r = lookup(key);
+    return h("div", { class: "res-day" },
+      h("div", { class: "day-label" }, `${label} · ${fWeekday.format(new Date(`${key}T12:00:00`))}`),
+      r ? h("div", { class: "res-vals" },
+        h("div", { class: "res-val" }, h("span", { class: "muted" }, "Mittag"), h("b", {}, num(r.mittag))),
+        h("div", { class: "res-val" }, h("span", { class: "muted" }, "Abend"), h("b", {}, num(r.abend))))
+        : h("div", { class: "muted" }, "nicht im Plan"));
+  };
+  return h("div", { class: "panel res" },
+    h("div", { class: "panel-head" }, h("h2", {}, "Reservierungen"),
+      h("div", { class: "head-actions" },
+        h("span", { class: "muted small" }, `Stand ${(dayKey(new Date(snap.finished_at)) === dayKey(new Date()) ? fHM : fShort).format(new Date(snap.finished_at)).replace(",", "")}`),
+        h("button", { class: "link", onclick: () => { location.hash = "/dienstplan"; } }, "Dienstplan", icon("arrow")))),
+    h("div", { class: "res-days" },
+      col("Heute", dayKey(new Date())), col("Morgen", dayKey(new Date(Date.now() + 864e5)))));
+}
+
 function viewOverview() {
   const act = activeAgents();
   const healthy = act.filter((c) => ["ok", "running"].includes(agentStatus(c).key)).length;
@@ -703,6 +735,7 @@ function viewOverview() {
 
   return [
     alerts,
+    reservationsPanel(),
     h("div", { class: "stats" },
       statCard("pulse", "cyan", "Agents gesund", `${healthy} / ${act.length}`, planned ? `+${planned} geplant` : ""),
       statCard("zap", "violet", "Läufe · 7 Tage", String(runs7)),
