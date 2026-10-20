@@ -32,13 +32,15 @@ export const AGENTS = [
     icon: "mail",
     color: "cyan",
     repo: "claude-mailagent",
-    workflow: "mailagent.yml",
+    // Seit 20.10.2026 laeuft er auf Josefs PC (lokal.py, Aufgabe "Jarvis Takt Mailagent")
+    // statt auf GitHub (Minuten-Kontingent). Jeder Lauf meldet sich ueber bericht.yml.
+    workflow: "bericht.yml",
     ref: "main",
-    schedule: { utcHours: [5, 6, 8, 10, 12, 14, 16, 18, 20], utcMinute: 10, label: "7:00, dann alle 2 Std. von 8:10 bis 22:10 Uhr" },
+    schedule: { utcHours: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], utcMinute: 10, label: "7:00, dann stündlich 8:10–22:10 vom PC (wenn er an ist)" },
     results: 90,
     graceHours: 3,
     artifact: "mailagent-result",
-    confirm: "Der Mailagent prüft jetzt alle Postfächer. Ab dem 28.09. verschiebt er erkannte Werbung dabei in den Papierkorb.",
+    localStart: { url: "jarvis://mail", label: "Jetzt prüfen", toast: "Der Mailagent prüft jetzt auf dem PC alle Postfächer (ca. 1 Minute). Danach aktualisieren." },
   },
   {
     id: "watchdiktat",

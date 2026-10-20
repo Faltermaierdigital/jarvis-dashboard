@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=20";
-import * as gh from "./github.js?v=20";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=21";
+import * as gh from "./github.js?v=21";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=20");
+      const { buildDemo } = await import("./demo.js?v=21");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -548,11 +548,17 @@ function smoothPath(pts) {
   return d;
 }
 
+// Nur Laeufe mit Postfach-Daten. Seit 20.10.2026 laeuft der Mailagent auf dem PC und meldet
+// bei einem Fehler nur { error } (bericht.yml endet dann rot), ohne accounts/totals.
+function mailResults() {
+  return resultsFor("mailagent").filter((r) => Array.isArray(r.accounts));
+}
+
 // Seit 25.09.2026 laeuft der Mailagent alle 2 Stunden und prueft nur neue Mails.
 // Ein Tag besteht also aus mehreren Laeufen: Treffer werden pro Tag addiert.
 function mailDays() {
   const byDay = new Map();
-  for (const r of resultsFor("mailagent")) {
+  for (const r of mailResults()) {
     const k = dayKey(new Date(r.finished_at));
     if (!byDay.has(k)) byDay.set(k, { key: k, runs: [], totals: { candidates: 0, flagged: 0, quarantined: 0, moved: 0, failed: 0, scanned: 0 } });
     const d = byDay.get(k);
@@ -563,7 +569,7 @@ function mailDays() {
 }
 
 function mailChart() {
-  const results = resultsFor("mailagent");
+  const results = mailResults();
   const byDay = mailDays();
   const days = [];
   for (let i = RESULT_DAYS - 1; i >= 0; i--) {
@@ -649,7 +655,7 @@ function mailChart() {
 }
 
 function mailboxRing() {
-  const res = resultsFor("mailagent")[0];
+  const res = mailResults()[0];
   const accounts = res ? res.accounts : [];
   const n = Math.max(accounts.length, 1);
   const cx = 110, cy = 110, r = 88, gapDeg = accounts.length > 1 ? 4 : 0;
@@ -828,7 +834,7 @@ function cleanupPanel(latest) {
 }
 
 function viewMail() {
-  const results = resultsFor("mailagent");
+  const results = mailResults();
   if (!results.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Ergebnisse vorhanden. Die Details werden 14 Tage aufbewahrt und danach automatisch gelöscht."));
   const days = [...mailDays().values()];
   if (!days.some((d) => d.key === state.ui.mailDay)) state.ui.mailDay = days[0].key;
