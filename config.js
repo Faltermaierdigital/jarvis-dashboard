@@ -135,9 +135,9 @@ export const AGENTS = [
     repo: "whatsapp-mitleser",
     workflow: "status.yml",
     ref: "main",
-    // Laeuft auf Josefs PC; der stuendliche Auswerter-Lauf dort meldet sich hier.
+    // Laeuft auf Josefs PC; der Auswerter meldet sich seit 20.10.2026 nur noch um 12 Uhr hier (GitHub-Minuten).
     // Ist der PC aus, kommt keine Meldung: dann "Überfällig" (normal, wenn der PC aus ist).
-    schedule: { utcHours: [...Array(24).keys()], utcMinute: 5, label: "stündlich vom PC (wenn er an ist)" },
+    schedule: { utcHours: [10], utcMinute: 5, label: "täglich 12 Uhr vom PC, bei Absturz sofort (Auswerter läuft weiter stündlich)" },
     graceHours: 3,
     artifact: "mitleser-result",
     results: 1,

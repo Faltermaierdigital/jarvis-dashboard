@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=21";
-import * as gh from "./github.js?v=21";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=22";
+import * as gh from "./github.js?v=22";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=21");
+      const { buildDemo } = await import("./demo.js?v=22");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
