@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=23";
-import * as gh from "./github.js?v=23";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=24";
+import * as gh from "./github.js?v=24";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=23");
+      const { buildDemo } = await import("./demo.js?v=24");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -1056,7 +1056,192 @@ function weekDates(woche) {
   });
 }
 
+// ---------- Dienstplan bearbeiten (Etappe 1 "weg vom Sheet", seit 21.10.2026) ----------
+// Ablage: Repo dienstplan, plan/<Montag>.json. plan_sync.py auf dem PC gleicht alle 10 Min.
+// mit dem Google Sheet ab: Felder, die hier gesetzt werden (manuell), gewinnen und landen
+// im Sheet; alles andere (Reservierungen, Tima, WhatsApp, Abschluss) kommt aus dem Sheet.
+const PLAN_REPO = "dienstplan";
+const PLAN_OPTIONS = [["", "–"], ["/", "frei"], ["8", "8"], ["11", "11"], ["11:30", "11:30"], ["12", "12"], ["14", "14"],
+  ["16", "16"], ["17", "17"], ["u", "Urlaub"], ["K", "krank"], ["Schule", "Schule"], ["Prüfung", "Prüfung"]];
+const PLAN_GRUPPEN = [["koch", "Köche"], ["aushilfe", "Aushilfsköche"], ["spueler", "Spüler"]];
+
+function planClass(raw) {
+  const v = (raw || "").trim();
+  if (!v) return "pc-empty";
+  if (v === "/") return "pc-off";
+  if (/^u\/?$/i.test(v)) return "pc-vac";
+  if (/^k$/i.test(v)) return "pc-sick";
+  if (/schule|prüf|pruef/i.test(v)) return "pc-school";
+  const hm = /^(\d{1,2})/.exec(v);
+  if (hm) { const hh = Number(hm[1]); return hh <= 10 ? "pc-early" : hh < 15 ? "pc-mid" : "pc-late"; }
+  return "pc-other";
+}
+
+function demoPlan() {
+  const snap = resultsFor("dienstplan")[0];
+  if (!snap) return { weeks: [] };
+  const toMon = (von) => { const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(von || ""); return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : von; };
+  return { weeks: snap.wochen.map((w) => ({ path: `plan/${toMon(w.woche.von)}.json`, sha: null, data: {
+    tab: w.tab, von: w.woche.von, bis: w.woche.bis, reservierung_mittag: w.reservierung_mittag,
+    reservierung_abend: w.reservierung_abend, events: w.events,
+    mitarbeiter: w.mitarbeiter.map((m, i) => ({ ...m, gruppe: i > 3 ? "spueler" : i > 2 ? "aushilfe" : "koch",
+      manuell: Array(7).fill(false), notizen: m.codes.map((c, d) => (c === "17" && d === 3 ? "WhatsApp: kann arbeiten" : "")) })),
+  } })) };
+}
+
+async function loadPlan() {
+  if (state.planLoading) return;
+  state.planLoading = true;
+  await Promise.resolve();   // erst nach dem laufenden render() weitermachen
+  try {
+    if (DEMO) { state.plan = demoPlan(); return; }
+    const list = await gh.getJson(`/repos/${OWNER}/${PLAN_REPO}/contents/plan`);
+    const today = dayKey(new Date());
+    const files = list.filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f.name))
+      .filter((f) => dayKey(new Date(new Date(`${f.name.slice(0, 10)}T12:00:00`).getTime() + 6 * 864e5)) >= today)
+      .sort((a, b) => a.name.localeCompare(b.name)).slice(0, 2);
+    const weeks = [];
+    for (const f of files) {
+      const { sha, text } = await gh.getFile(OWNER, PLAN_REPO, `plan/${f.name}`);
+      weeks.push({ path: `plan/${f.name}`, sha, data: JSON.parse(text) });
+    }
+    state.plan = { weeks };
+  } catch (e) {
+    state.plan = { weeks: [], error: e.status === 403 || e.status === 404 ? "kein-zugriff" : e.message };
+  } finally {
+    state.planLoading = false;
+    render();
+  }
+}
+
+async function savePlanWeek(week) {
+  if (DEMO) return;
+  week.sha = await gh.putFile(OWNER, PLAN_REPO, week.path, JSON.stringify(week.data, null, 1), week.sha, `Dashboard: ${week.data.tab}`);
+}
+
+function setShift(week, name, day, value) {
+  const apply = (data) => {
+    const m = data.mitarbeiter.find((x) => x.name === name);
+    if (!m) return;
+    m.codes[day] = value;
+    m.manuell = m.manuell || Array(7).fill(false);
+    m.manuell[day] = true;
+    data.geaendert_um = new Date().toISOString();
+  };
+  apply(week.data);
+  week.status = "saving";
+  render();
+  // Speichern nacheinander, sonst ueberholen sich zwei schnelle Aenderungen (sha).
+  week.queue = (week.queue || Promise.resolve()).then(async () => {
+    try {
+      await savePlanWeek(week);
+    } catch (e) {
+      if (e.status !== 409 && e.status !== 422) throw e;
+      // Der PC-Abgleich hat dazwischen gespeichert: frisch laden, Aenderung erneut anwenden.
+      const { sha, text } = await gh.getFile(OWNER, PLAN_REPO, week.path);
+      week.data = JSON.parse(text);
+      week.sha = sha;
+      apply(week.data);
+      await savePlanWeek(week);
+    }
+    week.status = "saved";
+    week.savedAt = Date.now();
+  }).catch((e) => { week.status = "error"; week.error = e.message; }).finally(render);
+}
+
+function shiftSelect(week, m, day) {
+  const v = (m.codes[day] || "").trim();
+  const opts = PLAN_OPTIONS.some(([o]) => o === v) ? PLAN_OPTIONS : [...PLAN_OPTIONS, [v, v]];
+  const note = (m.notizen || [])[day] || "";
+  return h("select", {
+    class: `pc ${planClass(v)}${note ? " wunsch" : ""}${(m.manuell || [])[day] ? " manuell" : ""}`,
+    title: note || undefined, "aria-label": `${m.name}, ${WEEKDAY_SHORT[day]}`,
+    onchange: (e) => {
+      let val = e.target.value;
+      if (val === "__eigen") {
+        val = (window.prompt("Eigene Zeit oder Text, z. B. 9:30 oder 16/Spühl", v) || "").trim();
+        if (!val) { render(); return; }
+      }
+      setShift(week, m.name, day, val);
+    },
+  }, opts.map(([o, l]) => h("option", { value: o, selected: o === v }, l)), h("option", { value: "__eigen" }, "eigene …"));
+}
+
+function viewPlanEditor() {
+  const p = state.plan;
+  const weeks = p.weeks;
+  if (!weeks.some((w) => w.path === state.ui.planWeek)) {
+    const today = dayKey(new Date());
+    const cur = weeks.find((w) => dayKey(new Date(new Date(`${w.path.slice(5, 15)}T12:00:00`).getTime() + 6 * 864e5)) >= today);
+    state.ui.planWeek = (cur || weeks[0]).path;
+  }
+  const week = weeks.find((w) => w.path === state.ui.planWeek);
+  const d = week.data;
+  const mon = new Date(`${week.path.slice(5, 15)}T12:00:00`);
+  const dates = WEEKDAY_SHORT.map((_, i) => { const x = new Date(mon.getTime() + i * 864e5); return `${String(x.getDate()).padStart(2, "0")}.${String(x.getMonth() + 1).padStart(2, "0")}.`; });
+  const todayIdx = dayKey(new Date()) >= dayKey(mon) && dayKey(new Date()) <= dayKey(new Date(mon.getTime() + 6 * 864e5)) ? (new Date().getDay() + 6) % 7 : -1;
+  const th = (i) => ({ class: `nowrap${i === todayIdx ? " today" : ""}` });
+  const infoRow = (label, vals, cls) => h("tr", { class: cls }, h("th", { class: "sticky" }, label),
+    (vals || []).map((v, i) => h("td", th(i), v || "")), h("td", {}, ""), h("td", {}, ""));
+  const working = WEEKDAY_SHORT.map((_, i) => d.mitarbeiter.filter((m) => /^\d/.test((m.codes[i] || "").trim())).length);
+
+  const rows = [];
+  for (const [g, label] of PLAN_GRUPPEN) {
+    const list = d.mitarbeiter.filter((m) => (m.gruppe || "koch") === g);
+    if (!list.length) continue;
+    rows.push(h("tr", { class: `grp g-${g}` }, h("th", { class: "sticky", colspan: 10 }, label)));
+    for (const m of list) {
+      rows.push(h("tr", {},
+        h("th", { class: `sticky name g-${g}` }, m.name),
+        WEEKDAY_SHORT.map((_, i) => h("td", th(i), shiftSelect(week, m, i))),
+        h("td", { class: `nowrap ${String(m.urlaub).trim().startsWith("-") ? "c-red" : ""}` }, m.urlaub),
+        h("td", { class: `nowrap mono ${String(m.ueberstunden).trim().startsWith("-") ? "c-red" : ""}` }, m.ueberstunden)));
+    }
+  }
+  const statusText = week.status === "saving" ? "Speichert …" : week.status === "error" ? `Nicht gespeichert: ${week.error}` :
+    week.status === "saved" ? `Gespeichert ${fHM.format(new Date(week.savedAt))} · im Sheet in max. 10 Min.` :
+    d.sync_um ? `Abgleich mit dem Sheet ${fHM.format(new Date(d.sync_um))}` : "";
+  const snap = resultsFor("dienstplan")[0];
+
+  return [
+    week.status === "error" ? h("div", { class: "notice err" }, `Die letzte Änderung wurde nicht gespeichert: ${week.error}. Seite neu laden und noch einmal versuchen.`) : null,
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" },
+        h("div", { class: "week-tabs" }, weeks.map((x) => h("button", {
+          class: `btn ${x.path === week.path ? "primary" : "ghost"}`, onclick: () => { state.ui.planWeek = x.path; render(); },
+        }, `${x.data.von || ""}–${x.data.bis || ""}`))),
+        h("div", { class: "head-actions" },
+          h("span", { class: `muted small${week.status === "error" ? " c-red" : ""}` }, statusText),
+          h("button", { class: "btn ghost", onclick: () => { state.plan = null; render(); } }, icon("refresh"), "Neu laden"),
+          snap ? h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Sheet") : null)),
+      h("div", { class: "table-wrap plan-wrap" }, h("table", { class: "plan edit" },
+        h("thead", {}, h("tr", {}, h("th", { class: "sticky" }, "Mitarbeiter"),
+          WEEKDAY_SHORT.map((x, i) => h("th", th(i), x, h("div", { class: "muted small" }, dates[i]))),
+          h("th", {}, "Urlaub"), h("th", {}, "Überst."))),
+        h("tbody", {},
+          infoRow("Res. Mittag", d.reservierung_mittag, "info"),
+          infoRow("Res. Abend", d.reservierung_abend, "info"),
+          infoRow("Events", d.events, "info events"),
+          infoRow("Im Dienst", working.map(String), "info sum"),
+          rows))),
+      h("div", { class: "legend plan-legend" },
+        [["pc-early", "Früh (bis 10)"], ["pc-mid", "Mittag"], ["pc-late", "Abend (ab 15)"], ["pc-off", "frei"],
+          ["pc-vac", "Urlaub"], ["pc-sick", "krank"], ["pc-school", "Schule/Prüfung"]]
+          .map(([c, l]) => h("span", {}, h("span", { class: `sc ${c}` }, l))),
+        h("span", { class: "muted small" }, "Blau umrandet = Wunsch aus WhatsApp (Maus drüber zeigt ihn)"))),
+  ];
+}
+
 function viewDienstplan() {
+  if (!state.plan) { loadPlan(); return h("div", { class: "panel" }, h("div", { class: "empty" }, "Dienstplan wird geladen …")); }
+  if (state.plan.weeks.length) return viewPlanEditor();
+  const notice = state.plan.error === "kein-zugriff"
+    ? h("div", { class: "notice" }, "Bearbeiten geht noch nicht: Dem Dashboard-Token fehlt „Contents: Read and write“ für das Repo dienstplan. Unten die Ansicht zum Lesen.")
+    : state.plan.error ? h("div", { class: "notice err" }, `Plan-Ablage nicht lesbar: ${state.plan.error}`) : null;
+  return [notice, viewDienstplanLesen()];
+}
+
+function viewDienstplanLesen() {
   const snap = resultsFor("dienstplan")[0];
   const cfg = AGENTS.find((a) => a.id === "dienstplan");
   const running = cfg && agentStatus(cfg).key === "running";

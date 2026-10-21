@@ -299,6 +299,34 @@ table.plan tr.sum:last-of-type td, table.plan tr.sum + tr td { border-bottom-col
 .sc-other { background: rgba(245,183,59,.12); color: #f7d58c; }
 .plan-legend { margin-top: 12px; }
 
+/* ---------- Dienstplan bearbeiten (seit 21.10.2026) ---------- */
+table.plan.edit td { padding: 4px 4px; }
+select.pc {
+  width: 100%; min-width: 66px; height: 30px; padding: 0 4px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent; font: inherit; font-size: 12.5px; text-align: center; text-align-last: center;
+  -webkit-appearance: none; appearance: none;
+}
+select.pc:focus-visible { outline: 2px solid #6fb8ff; outline-offset: 1px; }
+select.pc option { background: #0e1a2d; color: #e8eef8; }
+.pc-empty { background: rgba(255,255,255,.03); color: var(--dim); border-color: var(--line) !important; }
+.pc-off { background: rgba(135,151,176,.10); color: #8797b0; }
+.pc-early { background: rgba(56,200,240,.20); color: #c4f0ff; font-family: var(--mono); }
+.pc-mid { background: rgba(47,211,154,.20); color: #b5f3da; font-family: var(--mono); }
+.pc-late { background: rgba(139,124,246,.26); color: #ddd6ff; font-family: var(--mono); }
+.pc-vac { background: rgba(245,183,59,.22); color: #fadfa3; }
+.pc-sick { background: rgba(240,97,109,.24); color: #ffc6cb; }
+.pc-school { background: rgba(236,120,200,.22); color: #f8c9ea; }
+.pc-other { background: rgba(255,255,255,.09); color: var(--text); }
+select.pc.wunsch { border-color: #6fb8ff; }
+span.sc.pc-early, span.sc.pc-mid, span.sc.pc-late, span.sc.pc-off, span.sc.pc-vac, span.sc.pc-sick, span.sc.pc-school { min-width: 0; }
+table.plan tr.grp th { text-align: left; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding-top: 14px; color: var(--muted); }
+table.plan tr.grp.g-koch th { color: #7fe3bd; }
+table.plan tr.grp.g-aushilfe th { color: #b9e88f; }
+table.plan tr.grp.g-spueler th { color: #f6b77a; }
+table.plan th.name.g-koch { box-shadow: inset 3px 0 0 #2fd39a; }
+table.plan th.name.g-aushilfe { box-shadow: inset 3px 0 0 #9bd36a; }
+table.plan th.name.g-spueler { box-shadow: inset 3px 0 0 #f59a4b; }
+
 /* Schank */
 .chart .zero { stroke: #3a5478; stroke-width: 1.2; }
 .chart .sel-band { fill: rgba(56,200,240,.07); stroke: rgba(56,200,240,.25); }

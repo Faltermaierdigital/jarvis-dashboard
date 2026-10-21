@@ -51,6 +51,25 @@ export async function dispatch(owner, repo, workflow, ref, inputs) {
   });
 }
 
+// Dateien im Repo (Contents-API). Dafuer braucht der Token "Contents: Read and write"
+// (seit 21.10.2026, Dienstplan-Ablage plan/*.json im Repo dienstplan).
+export async function getFile(owner, repo, path) {
+  const j = await getJson(`/repos/${owner}/${repo}/contents/${path}`);
+  const bin = atob((j.content || "").replace(/\n/g, ""));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return { sha: j.sha, text: new TextDecoder().decode(bytes) };
+}
+
+export async function putFile(owner, repo, path, text, sha, message) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const res = await request(`/repos/${owner}/${repo}/contents/${path}`, {
+    method: "PUT", body: { message, content: btoa(bin), ...(sha ? { sha } : {}) },
+  });
+  return (await res.json()).content.sha;
+}
+
 export async function listArtifacts(owner, repo, name, perPage = 30) {
   const j = await getJson(`/repos/${owner}/${repo}/actions/artifacts?name=${encodeURIComponent(name)}&per_page=${perPage}`);
   return (j.artifacts || []).filter((a) => !a.expired);
