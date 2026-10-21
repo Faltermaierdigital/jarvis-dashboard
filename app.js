@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=24";
-import * as gh from "./github.js?v=24";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=25";
+import * as gh from "./github.js?v=25";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=24");
+      const { buildDemo } = await import("./demo.js?v=25");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -1062,7 +1062,7 @@ function weekDates(woche) {
 // im Sheet; alles andere (Reservierungen, Tima, WhatsApp, Abschluss) kommt aus dem Sheet.
 const PLAN_REPO = "dienstplan";
 const PLAN_OPTIONS = [["", "–"], ["/", "frei"], ["8", "8"], ["11", "11"], ["11:30", "11:30"], ["12", "12"], ["14", "14"],
-  ["16", "16"], ["17", "17"], ["u", "Urlaub"], ["K", "krank"], ["Schule", "Schule"], ["Prüfung", "Prüfung"]];
+  ["16", "16"], ["17", "17"], ["Hotel", "Hotel"], ["u", "Urlaub"], ["K", "krank"], ["Schule", "Schule"], ["Prüfung", "Prüfung"]];
 const PLAN_GRUPPEN = [["koch", "Köche"], ["aushilfe", "Aushilfsköche"], ["spueler", "Spüler"]];
 
 function planClass(raw) {
@@ -1072,6 +1072,7 @@ function planClass(raw) {
   if (/^u\/?$/i.test(v)) return "pc-vac";
   if (/^k$/i.test(v)) return "pc-sick";
   if (/schule|prüf|pruef/i.test(v)) return "pc-school";
+  if (/^hotel$/i.test(v)) return "pc-hotel";
   const hm = /^(\d{1,2})/.exec(v);
   if (hm) { const hh = Number(hm[1]); return hh <= 10 ? "pc-early" : hh < 15 ? "pc-mid" : "pc-late"; }
   return "pc-other";
@@ -1226,7 +1227,7 @@ function viewPlanEditor() {
           rows))),
       h("div", { class: "legend plan-legend" },
         [["pc-early", "Früh (bis 10)"], ["pc-mid", "Mittag"], ["pc-late", "Abend (ab 15)"], ["pc-off", "frei"],
-          ["pc-vac", "Urlaub"], ["pc-sick", "krank"], ["pc-school", "Schule/Prüfung"]]
+          ["pc-vac", "Urlaub"], ["pc-sick", "krank"], ["pc-school", "Schule/Prüfung"], ["pc-hotel", "Hotel"]]
           .map(([c, l]) => h("span", {}, h("span", { class: `sc ${c}` }, l))),
         h("span", { class: "muted small" }, "Blau umrandet = Wunsch aus WhatsApp (Maus drüber zeigt ihn)"))),
   ];

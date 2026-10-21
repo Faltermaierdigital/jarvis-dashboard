@@ -316,9 +316,10 @@ select.pc option { background: #0e1a2d; color: #e8eef8; }
 .pc-vac { background: rgba(245,183,59,.22); color: #fadfa3; }
 .pc-sick { background: rgba(240,97,109,.24); color: #ffc6cb; }
 .pc-school { background: rgba(236,120,200,.22); color: #f8c9ea; }
+.pc-hotel { background: rgba(214,163,108,.22); color: #f3d3ae; }
 .pc-other { background: rgba(255,255,255,.09); color: var(--text); }
 select.pc.wunsch { border-color: #6fb8ff; }
-span.sc.pc-early, span.sc.pc-mid, span.sc.pc-late, span.sc.pc-off, span.sc.pc-vac, span.sc.pc-sick, span.sc.pc-school { min-width: 0; }
+span.sc.pc-early, span.sc.pc-mid, span.sc.pc-late, span.sc.pc-off, span.sc.pc-vac, span.sc.pc-sick, span.sc.pc-school, span.sc.pc-hotel { min-width: 0; }
 table.plan tr.grp th { text-align: left; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding-top: 14px; color: var(--muted); }
 table.plan tr.grp.g-koch th { color: #7fe3bd; }
 table.plan tr.grp.g-aushilfe th { color: #b9e88f; }
