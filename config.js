@@ -156,8 +156,8 @@ export const AGENTS = [
     // Claude-Routine "dienstplan-opentable" auf Josefs PC (seit 21.10. stuendlich 9-21 Uhr, Jitter),
     // meldet sich am Ende ueber opentable_status.py. Ausgeloggt -> rot, haengt die Routine
     // oder ist der PC aus -> nach 3 Std. "Überfällig" (seit 21.10.2026).
-    schedule: { utcHours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19], utcMinute: 0, label: "stündlich 9–21 Uhr vom PC (wenn er an ist)" },
-    graceHours: 3,
+    schedule: { utcHours: [7, 11, 15, 19], utcMinute: 0, label: "läuft stündlich 9–21 Uhr, meldet alle 4 Std. und bei Änderung sofort" },
+    graceHours: 5,
     artifact: "opentable-result",
     results: 1,
     quiet: true,

@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=26";
-import * as gh from "./github.js?v=26";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=27";
+import * as gh from "./github.js?v=27";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=26");
+      const { buildDemo } = await import("./demo.js?v=27");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -193,6 +193,9 @@ async function loadResults(cfg) {
 }
 
 function schedule() {
+  const p = state.plan;
+  if (state.connected && !state.planLoading && (!p || Date.now() - (p.at || 0) > 5 * 60e3) &&
+      !((p && p.weeks) || []).some((w) => w.status === "saving")) loadPlan();
   clearTimeout(timer);
   if (!state.connected) return;
   const busy = Object.keys(state.pending).length > 0 || Object.keys(state.closing).length > 0 ||
@@ -693,6 +696,11 @@ function reservationsPanel() {
   const snap = resultsFor("dienstplan")[0];
   if (!snap) return null;
   const lookup = (key) => {
+    // Zuerst die Plan-Ablage (plan/*.json, max. 10 Min. alt, seit 21.10.2026), sonst Snapshot.
+    for (const w of (state.plan && state.plan.weeks) || []) {
+      const i = Math.round((new Date(`${key}T12:00:00`) - new Date(`${w.path.slice(5, 15)}T12:00:00`)) / 864e5);
+      if (i >= 0 && i < 7) return { mittag: (w.data.reservierung_mittag || [])[i], abend: (w.data.reservierung_abend || [])[i] };
+    }
     const [, m, d] = key.split("-");
     for (const w of snap.wochen || []) {
       const i = weekDates(w.woche).indexOf(`${d}.${m}.`);
@@ -719,12 +727,12 @@ function reservationsPanel() {
   const otWarn = !otSt || !["fail", "late"].includes(otSt.key) ? null :
     h("div", { class: `notice${otSt.key === "fail" ? " err" : ""}` },
       otSt.key === "fail" ? `OpenTable: ${otSt.detail || "letzter Lauf fehlgeschlagen"}. Zahlen sind nicht aktuell.`
-        : "OpenTable hat sich seit über 3 Stunden nicht gemeldet. Zahlen sind evtl. nicht aktuell.");
+        : "OpenTable hat sich seit über 5 Stunden nicht gemeldet. Zahlen sind evtl. nicht aktuell.");
   return h("div", { class: "panel res" },
     otWarn,
     h("div", { class: "panel-head" }, h("h2", {}, "Reservierungen · 7 Tage"),
       h("div", { class: "head-actions" },
-        h("span", { class: "muted small" }, `Stand ${(dayKey(new Date(snap.finished_at)) === dayKey(new Date()) ? fHM : fShort).format(new Date(snap.finished_at)).replace(",", "")}`),
+        h("span", { class: "muted small" }, `Stand ${((t) => (dayKey(t) === dayKey(new Date()) ? fHM : fShort).format(t).replace(",", ""))(new Date(((state.plan && state.plan.weeks[0]) || {}).data?.sync_um || snap.finished_at))}`),
         h("button", { class: "link", onclick: () => { location.hash = "/dienstplan"; } }, "Dienstplan", icon("arrow")))),
     h("div", { class: "res-days" }, [0, 1, 2, 3, 4, 5, 6].map(col)));
 }
@@ -1106,7 +1114,7 @@ async function loadPlan() {
       const { sha, text } = await gh.getFile(OWNER, PLAN_REPO, `plan/${f.name}`);
       weeks.push({ path: `plan/${f.name}`, sha, data: JSON.parse(text) });
     }
-    state.plan = { weeks };
+    state.plan = { weeks, at: Date.now() };
   } catch (e) {
     state.plan = { weeks: [], error: e.status === 403 || e.status === 404 ? "kein-zugriff" : e.message };
   } finally {
