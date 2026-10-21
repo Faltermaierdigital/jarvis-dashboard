@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=22";
-import * as gh from "./github.js?v=22";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=23";
+import * as gh from "./github.js?v=23";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -136,7 +136,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=22");
+      const { buildDemo } = await import("./demo.js?v=23");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -712,7 +712,16 @@ function reservationsPanel() {
         h("div", { class: "res-val" }, h("span", { class: "muted" }, "Abend"), h("b", {}, num(r.abend)))]
         : h("div", { class: "muted small" }, "nicht im Plan"));
   };
+  // Kommt von OpenTable nichts Frisches (ausgeloggt, Routine haengt), stehen hier alte
+  // Zahlen. Dann direkt im Kaestchen warnen (seit 21.10.2026).
+  const ot = AGENTS.find((a) => a.id === "opentable");
+  const otSt = ot ? agentStatus(ot) : null;
+  const otWarn = !otSt || !["fail", "late"].includes(otSt.key) ? null :
+    h("div", { class: `notice${otSt.key === "fail" ? " err" : ""}` },
+      otSt.key === "fail" ? `OpenTable: ${otSt.detail || "letzter Lauf fehlgeschlagen"}. Zahlen sind nicht aktuell.`
+        : "OpenTable hat sich seit über 3 Stunden nicht gemeldet. Zahlen sind evtl. nicht aktuell.");
   return h("div", { class: "panel res" },
+    otWarn,
     h("div", { class: "panel-head" }, h("h2", {}, "Reservierungen · 7 Tage"),
       h("div", { class: "head-actions" },
         h("span", { class: "muted small" }, `Stand ${(dayKey(new Date(snap.finished_at)) === dayKey(new Date()) ? fHM : fShort).format(new Date(snap.finished_at)).replace(",", "")}`),

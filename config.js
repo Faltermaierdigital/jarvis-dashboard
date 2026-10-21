@@ -145,6 +145,25 @@ export const AGENTS = [
     noStart: "Läuft auf dem PC",   // kein Start-Knopf: ein Start hier haette keinen Stand vom PC
   },
   {
+    id: "opentable",
+    name: "OpenTable-Reservierungen",
+    description: "Reservierungszahlen beider Wochen aus OpenTable in den Dienstplan",
+    icon: "grid",
+    color: "amber",
+    repo: "dienstplan",
+    workflow: "opentable-status.yml",
+    ref: "main",
+    // Claude-Routine "dienstplan-opentable" auf Josefs PC (10/14/18 Uhr, bis ~9 Min. Jitter),
+    // meldet sich am Ende ueber opentable_status.py. Ausgeloggt -> rot, haengt die Routine
+    // oder ist der PC aus -> nach 3 Std. "Überfällig" (seit 21.10.2026).
+    schedule: { utcHours: [8, 12, 16], utcMinute: 0, label: "10, 14 und 18 Uhr vom PC (wenn er an ist)" },
+    graceHours: 3,
+    artifact: "opentable-result",
+    results: 1,
+    quiet: true,
+    noStart: "Läuft auf dem PC",
+  },
+  {
     id: "sicherung",
     name: "Datensicherung",
     description: "Vault + Jarvis-Gedächtnis → USB-Stick D: und Google Drive",
