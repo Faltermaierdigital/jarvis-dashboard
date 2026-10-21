@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=27";
-import * as gh from "./github.js?v=27";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=28";
+import * as gh from "./github.js?v=28";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -74,6 +74,8 @@ const ICONS = {
   send: ["M22 2 11 13", "M22 2 15 22l-4-9-9-4z"],
   chat: ["M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z", "M8.5 12h.01M12 12h.01M15.5 12h.01"],
   grid: ["M4 4h16v16H4z", "M4 9h16M4 14h16M9 4v16M14 4v16"],
+  share: ["M12 3v12", "m7 8 5-5 5 5", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"],
+  printer: ["M7 8V3h10v5", "M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M7 14h10v7H7z"],
   shield: ["M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z", "m8.5 12 2.5 2.5 4.5-5"],
   beer: ["M6 8h10v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z", "M16 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2", "M6 8a3 3 0 0 1 3-4 3 3 0 0 1 5 1 2.5 2.5 0 0 1 2 3", "M9.5 12v6M12.5 12v6"],
 };
@@ -136,7 +138,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=27");
+      const { buildDemo } = await import("./demo.js?v=28");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -1176,6 +1178,110 @@ function shiftSelect(week, m, day) {
   }, opts.map(([o, l]) => h("option", { value: o, selected: o === v }, l)), h("option", { value: "__eigen" }, "eigene …"));
 }
 
+// ---------- Plan fuer die Mannschaft: Bild teilen / drucken (seit 21.10.2026) ----------
+// Ohne Urlaub, Ueberstunden und WhatsApp-Notizen (Josef: "das sollen die nicht sehen").
+const SHARE_FARBEN = {
+  "pc-early": ["#d7f3fb", "#0b5568"], "pc-mid": ["#d9f5e9", "#0f5e43"], "pc-late": ["#e6e1fd", "#3b2f8a"],
+  "pc-off": ["#f1f2f4", "#8a94a3"], "pc-vac": ["#fdf0d3", "#7a5208"], "pc-sick": ["#fde0e2", "#8f1d27"],
+  "pc-school": ["#fbe0f2", "#86245f"], "pc-hotel": ["#f6e7d6", "#7a4a17"], "pc-other": ["#eef0f3", "#2a3240"],
+  "pc-empty": ["#ffffff", "#c2c8d0"],
+};
+
+function planTabelle(week) {
+  const d = week.data;
+  const mon = new Date(`${week.path.slice(5, 15)}T12:00:00`);
+  const tage = WEEKDAY_SHORT.map((t, i) => { const x = new Date(mon.getTime() + i * 864e5); return `${t} ${String(x.getDate()).padStart(2, "0")}.${String(x.getMonth() + 1).padStart(2, "0")}.`; });
+  const zeilen = [
+    { art: "info", name: "Res. Mittag", werte: d.reservierung_mittag || [] },
+    { art: "info", name: "Res. Abend", werte: d.reservierung_abend || [] },
+    { art: "events", name: "Events", werte: d.events || [] },
+  ];
+  for (const [g, label] of PLAN_GRUPPEN) {
+    const list = d.mitarbeiter.filter((m) => (m.gruppe || "koch") === g);
+    if (!list.length) continue;
+    zeilen.push({ art: "gruppe", name: label, gruppe: g });
+    for (const m of list) zeilen.push({ art: "person", name: m.name, gruppe: g, werte: m.codes.map((c) => (c || "").trim()) });
+  }
+  return { titel: `Dienstplan Küche ${d.von || ""} – ${d.bis || ""}`, tage, zeilen };
+}
+
+function planBild(week) {
+  const t = planTabelle(week);
+  const nameW = 230, dayW = 190, rowH = 46, pad = 28, headH = 96;
+  const W = pad * 2 + nameW + dayW * 7;
+  const H = headH + rowH + t.zeilen.reduce((s, z) => s + (z.art === "gruppe" ? 40 : z.art === "events" ? 56 : rowH), 0) + pad;
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#14202f"; x.font = "600 30px system-ui, sans-serif"; x.textBaseline = "middle";
+  x.fillText(t.titel, pad, 46);
+  let y = headH;
+  x.font = "600 19px system-ui, sans-serif"; x.fillStyle = "#4a5568"; x.textAlign = "center";
+  t.tage.forEach((tg, i) => x.fillText(tg, pad + nameW + dayW * i + dayW / 2, y + rowH / 2));
+  x.textAlign = "left";
+  y += rowH;
+  const GR = { koch: "#2fae7e", aushilfe: "#7cb342", spueler: "#e8873a" };
+  for (const z of t.zeilen) {
+    if (z.art === "gruppe") {
+      x.fillStyle = GR[z.gruppe] || "#4a5568"; x.font = "700 17px system-ui, sans-serif";
+      x.fillText(z.name.toUpperCase(), pad, y + 24); y += 40; continue;
+    }
+    const h = z.art === "events" ? 56 : rowH;
+    x.strokeStyle = "#e6e9ee"; x.beginPath(); x.moveTo(pad, y + h); x.lineTo(W - pad, y + h); x.stroke();
+    if (z.art === "person") { x.fillStyle = GR[z.gruppe] || "#999"; x.fillRect(pad, y + 6, 5, h - 12); }
+    x.fillStyle = z.art === "person" ? "#14202f" : "#5a6576";
+    x.font = `${z.art === "person" ? 600 : 500} 19px system-ui, sans-serif`;
+    x.fillText(z.name, pad + 14, y + h / 2);
+    z.werte.forEach((v, i) => {
+      const cx = pad + nameW + dayW * i;
+      if (z.art === "person") {
+        const [bg, fg] = SHARE_FARBEN[planClass(v)] || SHARE_FARBEN["pc-other"];
+        x.fillStyle = bg; x.beginPath(); x.roundRect(cx + 8, y + 6, dayW - 16, h - 12, 8); x.fill();
+        x.fillStyle = fg; x.font = "600 19px system-ui, sans-serif"; x.textAlign = "center";
+        x.fillText(v === "/" ? "frei" : v === "u" ? "Urlaub" : v === "K" ? "krank" : v, cx + dayW / 2, y + h / 2);
+      } else {
+        x.fillStyle = z.art === "events" ? "#9a6a00" : "#5a6576";
+        x.font = `500 ${z.art === "events" ? 15 : 18}px system-ui, sans-serif`; x.textAlign = "center";
+        const txt = String(v || ""), max = dayW - 14;
+        // Events umbrechen (max. 2 Zeilen), damit nichts uebersteht.
+        const woerter = txt.split(/\s+/); const lines = [""];
+        for (const w of woerter) { const t2 = (lines[lines.length - 1] + " " + w).trim(); if (x.measureText(t2).width > max && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = t2; }
+        const shown = lines.slice(0, 2); if (lines.length > 2) shown[1] = shown[1].replace(/.{0,2}$/, "…");
+        shown.forEach((l, k) => x.fillText(l, cx + dayW / 2, y + h / 2 + (k - (shown.length - 1) / 2) * 19));
+      }
+      x.textAlign = "left";
+    });
+    y += h;
+  }
+  return c;
+}
+
+async function planTeilen(week) {
+  const c = planBild(week);
+  const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+  const name = `Dienstplan ${week.data.von || week.path.slice(5, 15)}.png`;
+  const file = new File([blob], name, { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: planTabelle(week).titel }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast("Bild heruntergeladen. Am Handy geht stattdessen direkt das Teilen-Menü auf.");
+}
+
+function planDrucken(week) {
+  const c = planBild(week);
+  const w = window.open("", "_blank");
+  if (!w) { toast("Das Druckfenster wurde blockiert. Bitte Pop-ups für das Dashboard erlauben.", true); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${planTabelle(week).titel}</title>
+    <style>@page{size:A4 landscape;margin:8mm}body{margin:0}img{width:100%;height:auto}</style></head>
+    <body><img src="${c.toDataURL("image/png")}" onload="setTimeout(()=>print(),200)"></body></html>`);
+  w.document.close();
+}
+
 function viewPlanEditor() {
   const p = state.plan;
   const weeks = p.weeks;
@@ -1221,6 +1327,8 @@ function viewPlanEditor() {
         }, `${x.data.von || ""}–${x.data.bis || ""}`))),
         h("div", { class: "head-actions" },
           h("span", { class: `muted small${week.status === "error" ? " c-red" : ""}` }, statusText),
+          h("button", { class: "btn primary", onclick: () => planTeilen(week) }, icon("share"), "Teilen"),
+          h("button", { class: "btn ghost", onclick: () => planDrucken(week) }, icon("printer"), "Drucken"),
           h("button", { class: "btn ghost", onclick: () => { state.plan = null; render(); } }, icon("refresh"), "Neu laden"),
           snap ? h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Sheet") : null)),
       h("div", { class: "table-wrap plan-wrap" }, h("table", { class: "plan edit" },
