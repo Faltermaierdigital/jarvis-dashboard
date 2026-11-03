@@ -409,4 +409,12 @@ input[type=number] {
   .kv dd { margin-bottom: 8px; }
   .footer { padding: 0 16px 16px; }
 }
+/* Schmale Agents-Karte auch auf breiten Fenstern (zwei Spalten nebeneinander): Knopf und Balken unter den Namen. */
+.panel:has(> .agent-row) { container-type: inline-size; }
+@container (max-width: 640px) {
+  .agent-row { grid-template-columns: 38px minmax(0, 1fr) auto; row-gap: 10px; }
+  .agent-row .agent-prog { grid-column: 2 / 4; }
+  .agent-row .btn { grid-column: 2 / 4; justify-self: start; }
+}
+
 @media (prefers-reduced-motion: reduce) { .bar.indet > i { animation: none; left: 0; width: 100%; opacity: .5; } }
