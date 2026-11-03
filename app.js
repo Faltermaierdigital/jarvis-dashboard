@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=28";
-import * as gh from "./github.js?v=28";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=29";
+import * as gh from "./github.js?v=29";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -138,7 +138,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=28");
+      const { buildDemo } = await import("./demo.js?v=29");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -478,7 +478,7 @@ function agentDesc(cfg, st) {
     const res = resultsFor("sicherung")[0];
     if (!res || res.groesse_mb == null) return cfg.description;
     const frei = res.stick_frei_gb != null ? `Stick ${String(res.stick_frei_gb).replace(".", ",")} GB frei` : "Stick fehlt";
-    return `${String(res.groesse_mb).replace(".", ",")} MB · ${frei} · Drive ${res.drive ? "ok" : "fehlt"}`;
+    return `${String(res.groesse_mb).replace(".", ",")} MB · ${frei} · iCloud ${res.drive ? "ok" : "fehlt"}`;
   }
   if (cfg.id !== "whatsapp") return cfg.description;
   const res = resultsFor("whatsapp")[0];
@@ -802,8 +802,8 @@ function viewAgents() {
       const res = resultsFor("sicherung")[0];
       if (res && res.zeit) rows.splice(2, 0,
         ["Letzte Sicherung", `${fShort.format(new Date(res.zeit))} · ${res.ausloeser || ""} · ${res.groesse_mb != null ? res.groesse_mb.toLocaleString("de-DE") : "–"} MB`],
-        ["USB-Stick D:", res.stick ? `ok · ${res.stick_anzahl} Sicherungen · ${res.stick_frei_gb.toLocaleString("de-DE")} GB frei` : "fehlt"],
-        ["Google Drive", res.drive ? `ok (Jarvis_aktuell.zip)${res.drive_frei_gb != null ? ` · ${res.drive_frei_gb.toLocaleString("de-DE")} GB frei` : ""}` : "fehlt"]);
+        ["USB-Stick", res.stick ? `ok · ${res.stick_anzahl} Sicherungen · ${res.stick_frei_gb.toLocaleString("de-DE")} GB frei` : "fehlt"],
+        ["iCloud", res.drive ? "ok (hochgeladen)" : "fehlt"]);
     }
     if (state.agentErrors[cfg.id]) rows.push(["Fehler", state.agentErrors[cfg.id]]);
     return h("div", { class: "panel" },

@@ -166,15 +166,15 @@ export const AGENTS = [
   {
     id: "sicherung",
     name: "Datensicherung",
-    description: "Vault + Jarvis-Gedächtnis → USB-Stick D: und Google Drive",
+    description: "Vault + Jarvis-Gedächtnis, verschlüsselt → USB-Stick und iCloud",
     icon: "shield",
     color: "cyan",
     repo: "jarvis-sicherung",
     workflow: "status.yml",
     ref: "main",
-    // Laeuft auf Josefs PC (Aufgabe "Jarvis Datensicherung", 5:00 Uhr = 3:00 UTC im
-    // Sommer, 4:00 UTC im Winter). War der PC aus, laeuft sie beim Einschalten nach.
-    schedule: { utcHours: [3], utcMinute: 0, label: "täglich 5:00 Uhr vom PC (läuft nach, wenn der PC aus war)" },
+    // Laeuft auf dem Mac mini (launchd de.jarvis.sicherung, 5:00 Uhr = 3:00 UTC im
+    // Sommer, 4:00 UTC im Winter).
+    schedule: { utcHours: [3], utcMinute: 0, label: "täglich 5:00 Uhr vom Mac" },
     graceHours: 4,
     artifact: "sicherung-result",
     results: 1,
