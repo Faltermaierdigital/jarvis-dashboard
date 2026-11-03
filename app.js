@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=30";
-import * as gh from "./github.js?v=30";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=31";
+import * as gh from "./github.js?v=31";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -127,7 +127,7 @@ function startLocalAction(cfg) {
   if (DEMO) { toast("Demo-Modus: Der Jarvis-Starter wurde nicht aufgerufen."); return; }
   window.location.href = cfg.localStart.url;
   state.pending[cfg.id] = Date.now();
-  toast(cfg.localStart.toast || `${cfg.name} auf dem PC gestartet.`);
+  toast(cfg.localStart.toast || `${cfg.name} auf dem Mac gestartet.`);
   render();
   clearTimeout(timer);
   timer = setTimeout(load, 50000);
@@ -138,7 +138,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=30");
+      const { buildDemo } = await import("./demo.js?v=31");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;

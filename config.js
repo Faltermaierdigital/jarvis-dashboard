@@ -36,11 +36,11 @@ export const AGENTS = [
     // statt auf GitHub (Minuten-Kontingent). Jeder Lauf meldet sich ueber bericht.yml.
     workflow: "bericht.yml",
     ref: "main",
-    schedule: { utcHours: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], utcMinute: 10, label: "7:00, dann stündlich 8:10–22:10 vom PC (wenn er an ist)" },
+    schedule: { utcHours: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], utcMinute: 10, label: "7:00, dann stündlich 8:10–22:10 vom Mac" },
     results: 90,
     graceHours: 3,
     artifact: "mailagent-result",
-    localStart: { url: "jarvis://mail", label: "Jetzt prüfen", toast: "Der Mailagent prüft jetzt auf dem PC alle Postfächer (ca. 1 Minute). Danach aktualisieren." },
+    localStart: { url: "jarvis://mail", label: "Jetzt prüfen", toast: "Der Mailagent prüft jetzt auf dem Mac alle Postfächer (ca. 1 Minute). Danach aktualisieren." },
   },
   {
     id: "watchdiktat",
@@ -112,19 +112,19 @@ export const AGENTS = [
   {
     id: "kosten",
     name: "Claude-Kosten",
-    description: "Gesamtverbrauch aller Claude-Agenten (vom PC gesammelt)",
+    description: "Gesamtverbrauch aller Claude-Agenten (vom Mac gesammelt)",
     icon: "pulse",
     color: "cyan",
     repo: "claude-mailagent",
     workflow: "claude-kosten.yml",
     ref: "main",
     // Laeuft auf Josefs PC (Aufgabe "Jarvis Claude-Kosten", kosten_sammeln.py), meldet sich hier.
-    schedule: { utcHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22], utcMinute: 50, label: "alle 2 Std. vom PC (wenn er an ist)" },
+    schedule: { utcHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22], utcMinute: 50, label: "alle 2 Std. vom Mac" },
     graceHours: 3,
     artifact: "kosten-result",
     results: 1,
     quiet: true,
-    noStart: "Läuft auf dem PC",
+    noStart: "Läuft auf dem Mac",
   },
   {
     id: "whatsapp",
@@ -137,12 +137,12 @@ export const AGENTS = [
     ref: "main",
     // Laeuft auf Josefs PC; der Auswerter meldet sich seit 20.10.2026 nur noch um 12 Uhr hier (GitHub-Minuten).
     // Ist der PC aus, kommt keine Meldung: dann "Überfällig" (normal, wenn der PC aus ist).
-    schedule: { utcHours: [10], utcMinute: 5, label: "täglich 12 Uhr vom PC, bei Absturz sofort (Auswerter läuft weiter stündlich)" },
+    schedule: { utcHours: [10], utcMinute: 5, label: "täglich 12 Uhr vom Mac, bei Absturz sofort (Auswerter läuft weiter stündlich)" },
     graceHours: 3,
     artifact: "mitleser-result",
     results: 1,
     quiet: true,
-    noStart: "Läuft auf dem PC",   // kein Start-Knopf: ein Start hier haette keinen Stand vom PC
+    noStart: "Läuft auf dem Mac",   // kein Start-Knopf: ein Start hier haette keinen Stand vom Mac
   },
   {
     id: "opentable",
@@ -161,7 +161,7 @@ export const AGENTS = [
     artifact: "opentable-result",
     results: 1,
     quiet: true,
-    noStart: "Läuft auf dem PC",
+    noStart: "Läuft auf dem Mac",
   },
   {
     id: "sicherung",
@@ -179,6 +179,6 @@ export const AGENTS = [
     artifact: "sicherung-result",
     results: 1,
     quiet: true,
-    localStart: { url: "jarvis://sichern", label: "Jetzt sichern", toast: "Sicherung läuft auf dem PC (ca. 1 Minute). Am Ende kommt dort ein Fenster mit dem Ergebnis." },
+    localStart: { url: "jarvis://sichern", label: "Jetzt sichern", toast: "Sicherung läuft auf dem Mac (ca. 1 Minute). Das Ergebnis steht danach hier." },
   },
 ];
