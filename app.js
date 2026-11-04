@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=31";
-import * as gh from "./github.js?v=31";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=32";
+import * as gh from "./github.js?v=32";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -19,7 +19,7 @@ const state = {
   results: {},       // runId -> result.json
   resultErrors: [],
   pending: {},       // agentId -> timestamp des manuellen Starts
-  closing: {},       // Todoist-ID -> timestamp, Haken gesetzt, Abgleich laeuft
+  closing: {},       // Aufgaben-ID -> timestamp, Haken gesetzt, Abgleich laeuft
   ui: { run: null, account: "", kind: "" },
 };
 let timer = null;
@@ -98,7 +98,7 @@ const fTime = fmt({ hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const fShort = fmt({ day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const fDay = fmt({ day: "2-digit", month: "2-digit" });
 const fDayLong = fmt({ weekday: "short", day: "2-digit", month: "2-digit" });
-// ISO-Tag (YYYY-MM-DD) in Berliner Zeit, vergleichbar mit Todoist-/Kalenderdaten.
+// ISO-Tag (YYYY-MM-DD) in Berliner Zeit, vergleichbar mit Aufgaben- und Kalenderdaten.
 const fDayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 const dayKey = (d) => fDayKey.format(d);
 function when(iso) {
@@ -138,7 +138,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=31");
+      const { buildDemo } = await import("./demo.js?v=32");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -287,7 +287,7 @@ async function startAgent(cfg) {
 }
 
 // Haken im Planer: startet den Abgleich mit der Aufgaben-ID, der sie in
-// Todoist erledigt und danach Kalender und To-dos neu holt.
+// erledigt und danach Kalender und To-dos neu holt.
 async function closeTask(task) {
   const cfg = AGENTS.find((a) => a.id === "sync");
   if (!cfg || state.closing[task.id]) return;
@@ -296,7 +296,7 @@ async function closeTask(task) {
   if (DEMO) { toast(`Demo-Modus: „${task.content}“ wurde nicht wirklich erledigt.`); return; }
   try {
     await gh.dispatch(OWNER, cfg.repo, cfg.workflow, cfg.ref || "main", { close_task_id: task.id });
-    toast(`„${task.content}“ wird in Todoist erledigt …`);
+    toast(`„${task.content}“ wird erledigt …`);
     clearTimeout(timer);
     timer = setTimeout(load, 8000);
   } catch (e) {
@@ -990,7 +990,7 @@ function taskRow(t) {
     h("button", { class: `check ${PRIO[t.priority] || ""}`, "aria-label": `„${t.content}“ erledigen`, disabled: closing, onclick: () => closeTask(t) },
       closing ? icon("check") : null),
     h("div", { class: "task-body" },
-      h("a", { class: "task-title", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.content),
+      t.link ? h("a", { class: "task-title", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.content) : h("span", { class: "task-title" }, t.content),
       h("div", { class: "task-meta muted" }, [t.project, due, t.recurring ? "wiederkehrend" : ""].filter(Boolean).join(" · "))));
 }
 
@@ -1036,7 +1036,7 @@ function viewPlaner() {
     cfg && state.agentErrors[cfg.id] ? h("div", { class: "notice err" }, state.agentErrors[cfg.id]) : null,
     snap && snap.errors && snap.errors.length ? h("div", { class: "notice err" }, `Letzter Abgleich mit Fehlern: ${snap.errors.join(" · ")}`) : null,
     h("div", { class: "row-3" }, eventsPanel(false), tasksPanel(false)),
-    h("p", { class: "muted small" }, "Abgleich alle 2 Stunden zwischen 6 und 22 Uhr oder per Knopf. Ein Haken erledigt die Aufgabe in Todoist, das dauert etwa 30 Sekunden. Termine, die in Google als privat markiert sind, erscheinen als „Beschäftigt“."),
+    h("p", { class: "muted small" }, "Abgleich alle 2 Stunden zwischen 6 und 22 Uhr oder per Knopf. Ein Haken erledigt die Aufgabe in Apple Erinnerungen, das dauert etwa 30 Sekunden, solange der Mac läuft."),
   ];
 }
 

@@ -45,7 +45,7 @@ export const AGENTS = [
   {
     id: "watchdiktat",
     name: "Watch-Diktat",
-    description: "Diktat → Termin im Kalender oder Aufgabe in Todoist",
+    description: "Diktat → Termin im Kalender oder Aufgabe in Erinnerungen",
     icon: "mic",
     color: "green",
     repo: "watch-diktat",
@@ -62,7 +62,7 @@ export const AGENTS = [
   {
     id: "sync",
     name: "Kalender & To-dos",
-    description: "Holt Termine (14 Tage) und offene Todoist-Aufgaben",
+    description: "Holt Termine (14 Tage) und offene Aufgaben",
     icon: "calendar",
     color: "amber",
     repo: "watch-diktat",
