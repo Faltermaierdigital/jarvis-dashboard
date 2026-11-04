@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=32";
-import * as gh from "./github.js?v=32";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=33";
+import * as gh from "./github.js?v=33";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -138,7 +138,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=32");
+      const { buildDemo } = await import("./demo.js?v=33");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -692,7 +692,7 @@ function mailboxRing() {
 
 // ---------- Seiten ----------
 // Reservierungen heute und die 6 Tage danach: Zahlen aus den Zeilen "Reservierung
-// Mittag/Abend" des Dienstplan-Abgleichs (OpenTable schreibt sie ins Sheet).
+// Mittag/Abend" des Dienstplan-Abgleichs (OpenTable schreibt sie in die Plan-Ablage).
 const fWdShort = fmt({ weekday: "short" });
 function reservationsPanel() {
   const snap = resultsFor("dienstplan")[0];
@@ -1066,10 +1066,9 @@ function weekDates(woche) {
   });
 }
 
-// ---------- Dienstplan bearbeiten (Etappe 1 "weg vom Sheet", seit 21.10.2026) ----------
-// Ablage: Repo dienstplan, plan/<Montag>.json. plan_sync.py auf dem PC gleicht alle 10 Min.
-// mit dem Google Sheet ab: Felder, die hier gesetzt werden (manuell), gewinnen und landen
-// im Sheet; alles andere (Reservierungen, Tima, WhatsApp, Abschluss) kommt aus dem Sheet.
+// ---------- Dienstplan bearbeiten (seit 21.10.2026, ohne Sheet seit 04.11.2026) ----------
+// Ablage: Repo dienstplan, plan/<Montag>.json. Reservierungen, Tima, WhatsApp und Abschluss
+// schreiben in dieselben Dateien (plan_ablage.py).
 const PLAN_REPO = "dienstplan";
 const PLAN_OPTIONS = [["", "–"], ["/", "frei"], ["8", "8"], ["11", "11"], ["11:30", "11:30"], ["12", "12"], ["14", "14"],
   ["16", "16"], ["17", "17"], ["Hotel", "Hotel"], ["u", "Urlaub"], ["K", "krank"], ["Schule", "Schule"], ["Prüfung", "Prüfung"]];
@@ -1148,7 +1147,7 @@ function setShift(week, name, day, value) {
       await savePlanWeek(week);
     } catch (e) {
       if (e.status !== 409 && e.status !== 422) throw e;
-      // Der PC-Abgleich hat dazwischen gespeichert: frisch laden, Aenderung erneut anwenden.
+      // Ein Automatik-Lauf hat dazwischen gespeichert: frisch laden, Aenderung erneut anwenden.
       const { sha, text } = await gh.getFile(OWNER, PLAN_REPO, week.path);
       week.data = JSON.parse(text);
       week.sha = sha;
@@ -1314,8 +1313,8 @@ function viewPlanEditor() {
     }
   }
   const statusText = week.status === "saving" ? "Speichert …" : week.status === "error" ? `Nicht gespeichert: ${week.error}` :
-    week.status === "saved" ? `Gespeichert ${fHM.format(new Date(week.savedAt))} · im Sheet in max. 10 Min.` :
-    d.sync_um ? `Abgleich mit dem Sheet ${fHM.format(new Date(d.sync_um))}` : "";
+    week.status === "saved" ? `Gespeichert ${fHM.format(new Date(week.savedAt))}` :
+    d.sync_um ? `Zuletzt automatisch aktualisiert ${fHM.format(new Date(d.sync_um))}` : "";
   const snap = resultsFor("dienstplan")[0];
 
   return [
@@ -1329,8 +1328,7 @@ function viewPlanEditor() {
           h("span", { class: `muted small${week.status === "error" ? " c-red" : ""}` }, statusText),
           h("button", { class: "btn primary", onclick: () => planTeilen(week) }, icon("share"), "Teilen"),
           h("button", { class: "btn ghost", onclick: () => planDrucken(week) }, icon("printer"), "Drucken"),
-          h("button", { class: "btn ghost", onclick: () => { state.plan = null; render(); } }, icon("refresh"), "Neu laden"),
-          snap ? h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Sheet") : null)),
+          h("button", { class: "btn ghost", onclick: () => { state.plan = null; render(); } }, icon("refresh"), "Neu laden"))),
       h("div", { class: "table-wrap plan-wrap" }, h("table", { class: "plan edit" },
         h("thead", {}, h("tr", {}, h("th", { class: "sticky" }, "Mitarbeiter"),
           WEEKDAY_SHORT.map((x, i) => h("th", th(i), x, h("div", { class: "muted small" }, dates[i]))),
@@ -1371,7 +1369,7 @@ function viewDienstplanLesen() {
   for (const hnt of roll.hinweise || []) if (!/existiert bereits/.test(hnt)) notices.push(h("div", { class: "notice" }, hnt));
 
   const weeks = snap.wochen || [];
-  if (!weeks.length) return [notices, h("div", { class: "panel" }, h("div", { class: "empty" }, "Keine laufende oder kommende Woche im Sheet gefunden."))];
+  if (!weeks.length) return [notices, h("div", { class: "panel" }, h("div", { class: "empty" }, "Keine laufende oder kommende Woche gefunden."))];
   if (!weeks.some((w) => w.tab === state.ui.week)) state.ui.week = weeks[0].tab;
   const w = weeks.find((x) => x.tab === state.ui.week);
   const dates = weekDates(w.woche);
@@ -1409,7 +1407,6 @@ function viewDienstplanLesen() {
         }, `${x.status === "laufend" ? "Diese Woche" : x.status === "kommend" ? "Nächste Woche" : x.tab} · ${x.woche.von || "?"}–${x.woche.bis || "?"}`))),
         h("div", { class: "head-actions" },
           h("span", { class: "muted small" }, `Stand ${fHM.format(new Date(snap.finished_at))}`),
-          h("a", { class: "btn ghost", href: snap.sheet_url, target: "_blank", rel: "noopener noreferrer" }, icon("external"), "Im Sheet öffnen"),
           cfg ? h("button", { class: "btn", disabled: running, onclick: () => startAgent(cfg) }, icon("refresh"), running ? "Gleicht ab …" : "Jetzt abgleichen") : null)),
       h("div", { class: "table-wrap plan-wrap" }, table),
       h("div", { class: "legend plan-legend" },
