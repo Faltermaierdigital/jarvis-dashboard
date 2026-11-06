@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=33";
-import * as gh from "./github.js?v=33";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=35";
+import * as gh from "./github.js?v=35";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -77,6 +77,7 @@ const ICONS = {
   share: ["M12 3v12", "m7 8 5-5 5 5", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"],
   printer: ["M7 8V3h10v5", "M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M7 14h10v7H7z"],
   shield: ["M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z", "m8.5 12 2.5 2.5 4.5-5"],
+  wallet: ["M3 7a2 2 0 0 1 2-2h13v4", "M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z", "M16 14h.01"],
   beer: ["M6 8h10v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z", "M16 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2", "M6 8a3 3 0 0 1 3-4 3 3 0 0 1 5 1 2.5 2.5 0 0 1 2 3", "M9.5 12v6M12.5 12v6"],
 };
 function icon(name, cls) {
@@ -138,7 +139,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=33");
+      const { buildDemo } = await import("./demo.js?v=35");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -408,6 +409,7 @@ const VIEWS = [
   { id: "dienstplan", label: "Dienstplan", icon: "grid", render: viewDienstplan },
   { id: "schank", label: "Schank", icon: "beer", render: viewSchank },
   { id: "diktate", label: "Diktate", icon: "mic", render: viewDiktate },
+  { id: "haushalt", label: "Haushaltsbuch", icon: "wallet", render: viewHaushalt },
   { id: "aktivitaet", label: "Aktivität", icon: "activity", render: viewActivity },
   { id: "einstellungen", label: "Einstellungen", icon: "settings", render: viewSettings },
 ];
@@ -1449,6 +1451,82 @@ function viewDiktate() {
             ? (r.link ? h("a", { href: r.link, target: "_blank", rel: "noopener noreferrer" }, "öffnen ↗") : h("span", { class: "tag c-green" }, "angelegt"))
             : [h("span", { class: "tag c-red" }, "Fehler"), " ", h("span", { class: "muted" }, r.error || "")])))))) :
         h("div", { class: "empty" }, "Noch keine Diktate. Die Einträge werden 14 Tage aufbewahrt und danach automatisch gelöscht.")),
+  ];
+}
+
+// ---------- Haushaltsbuch (seit 06.11.2026, nur auf dem Mac) ----------
+// Josefs Kontodaten verlassen den Mac nicht: Die Seite holt die fertige Monatsuebersicht direkt vom lokalen
+// Dienst (tv_dienst.py, GET /haushalt, nur 127.0.0.1). Auf dem Handy oder anderswo gibt es deshalb nichts zu sehen.
+const HAUSHALT_URL = "http://127.0.0.1:10204/haushalt";
+
+async function loadHaushalt() {
+  state.haushalt = { loading: true };
+  try {
+    const r = await fetch(HAUSHALT_URL, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status === 404 ? "Noch keine Übersicht gebaut." : `Antwort ${r.status}`);
+    state.haushalt = { data: await r.json() };
+  } catch (e) {
+    state.haushalt = { error: e.message || String(e) };
+  }
+  render();
+}
+
+function viewHaushalt() {
+  const hb = state.haushalt;
+  if (!hb) { loadHaushalt(); return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …")); }
+  if (hb.loading) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …"));
+  if (hb.error) return h("div", { class: "panel" }, h("div", { class: "empty" },
+    "Das Haushaltsbuch ist nur am Mac sichtbar, deine Kontodaten verlassen ihn nicht. ",
+    h("span", { class: "muted" }, `(${hb.error})`), " ",
+    h("button", { class: "link", onclick: () => { state.haushalt = null; render(); } }, "Neu laden", icon("refresh"))));
+  const d = hb.data;
+  const monate = d.monate || [];
+  if (!monate.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Umsätze."));
+  if (!monate.some((m) => m.monat === state.ui.haushaltMonat)) state.ui.haushaltMonat = monate[0].monat;
+  const m = monate.find((x) => x.monat === state.ui.haushaltMonat);
+  const idx = monate.indexOf(m);
+  const vor = monate[idx + 1];
+  const name = (mo) => new Date(`${mo}-15T12:00:00`).toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+  const ausgabenKat = m.kategorien.filter((k) => k.betrag < 0);
+  const einKat = m.kategorien.filter((k) => k.betrag > 0).sort((a, b) => b.betrag - a.betrag);
+  const max = Math.max(1, ...ausgabenKat.map((k) => -k.betrag));
+  const vorKat = Object.fromEntries((vor ? vor.kategorien : []).map((k) => [k.kategorie, k.betrag]));
+  const teilmonat = d.erster_tag && d.erster_tag.slice(0, 7) === m.monat && d.erster_tag.slice(8) !== "01";
+  const eur2 = (x) => Number(x || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+  return [
+    h("div", { class: "week-tabs" }, monate.slice(0, 6).map((x) => h("button", {
+      class: `btn ${x.monat === m.monat ? "primary" : "ghost"}`, onclick: () => { state.ui.haushaltMonat = x.monat; render(); },
+    }, name(x.monat)))),
+    teilmonat ? h("div", { class: "notice" }, `${name(m.monat)} ist unvollständig: Die Banken liefern erst ab ${new Date(d.erster_tag).toLocaleDateString("de-DE")}.`) : null,
+    h("div", { class: "stats" },
+      statCard("trend", "green", "Einnahmen", eur(m.einnahmen)),
+      statCard("wallet", "red", "Ausgaben", eur(m.ausgaben)),
+      statCard("pulse", m.saldo >= 0 ? "cyan" : "amber", "Übrig", eur(m.saldo)),
+      statCard("refresh", "violet", "Umbuchungen", eur(Math.abs(m.umbuchungen)))),
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" }, h("h2", {}, `Ausgaben nach Kategorie · ${name(m.monat)}`), vor ? h("span", { class: "muted" }, `Vormonat: ${eur(vor.einnahmen)} rein, ${eur(vor.ausgaben)} raus`) : null),
+      h("div", { class: "table-wrap" }, h("table", {},
+        h("thead", {}, h("tr", {}, ["Kategorie", "", "Betrag", "Vormonat"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, ausgabenKat.map((k) => h("tr", {},
+          h("td", { class: "nowrap" }, k.kategorie),
+          h("td", { class: "hb-balken" }, h("div", { class: "bar violet" }, h("i", { style: { width: `${Math.round(-k.betrag / max * 100)}%` } }))),
+          h("td", { class: "nowrap mono" }, eur2(-k.betrag)),
+          h("td", { class: "nowrap mono muted" }, vorKat[k.kategorie] == null ? "–" : vorKat[k.kategorie] > 0 ? `+${eur(vorKat[k.kategorie])} Erstattung` : eur(-vorKat[k.kategorie])))))))),
+    einKat.length ? h("div", { class: "panel" },
+      h("div", { class: "panel-head" }, h("h2", {}, "Einnahmen")),
+      h("div", { class: "table-wrap" }, h("table", {}, h("tbody", {}, einKat.map((k) => h("tr", {},
+        h("td", {}, k.kategorie), h("td", { class: "nowrap mono" }, eur2(k.betrag)))))))) : null,
+    h("div", { class: "panel" },
+      h("div", { class: "panel-head" }, h("h2", {}, "Größte Ausgaben")),
+      h("div", { class: "table-wrap" }, h("table", {},
+        h("thead", {}, h("tr", {}, ["Datum", "An", "Kategorie", "Konto", "Betrag"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, m.groesste.map((g) => h("tr", {},
+          h("td", { class: "nowrap mono" }, new Date(g.datum).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })),
+          h("td", { class: "wrap" }, g.gegen || "–"),
+          h("td", { class: "nowrap" }, h("span", { class: `tag ${g.kategorie === "Sonstiges" ? "c-amber" : "c-violet"}` }, g.kategorie)),
+          h("td", { class: "nowrap muted" }, g.konto),
+          h("td", { class: "nowrap mono" }, eur2(-g.betrag)))))))),
+    h("div", { class: "fine" }, `Stand ${new Date(d.stand).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · ${d.umsaetze} Umsätze seit ${new Date(d.erster_tag).toLocaleDateString("de-DE")} · Sparkasse und PayPal · Umbuchungen zwischen deinen Konten und PayPal-Aufladungen zählen nicht doppelt · nur auf diesem Mac`),
   ];
 }
 

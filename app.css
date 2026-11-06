@@ -418,3 +418,6 @@ input[type=number] {
 }
 
 @media (prefers-reduced-motion: reduce) { .bar.indet > i { animation: none; left: 0; width: 100%; opacity: .5; } }
+
+/* Haushaltsbuch */
+.hb-balken { width: 40%; min-width: 120px; }
