@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=36";
-import * as gh from "./github.js?v=36";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=37";
+import * as gh from "./github.js?v=37";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -139,7 +139,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=36");
+      const { buildDemo } = await import("./demo.js?v=37");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -434,7 +434,7 @@ function render() {
   }, icon(v.icon), v.label));
 
   const liveDot = state.error ? "red" : state.loading && !state.lastUpdate ? "amber" : "green";
-  const liveText = LOKAL ? "NUR AUF DIESEM MAC" : DEMO ? "DEMO-MODUS" : state.error ? "VERBINDUNGSFEHLER" : state.lastUpdate ? `LIVE · ${fTime.format(state.lastUpdate)}` : "LÄDT …";
+  const liveText = DEMO ? "DEMO-MODUS" : state.error ? "VERBINDUNGSFEHLER" : state.lastUpdate ? `LIVE · ${fTime.format(state.lastUpdate)}` : "LÄDT …";
 
   const body = [];
   if (state.error) body.push(h("div", { class: "notice err" }, `GitHub nicht erreichbar: ${state.error}`));
@@ -1454,33 +1454,80 @@ function viewDiktate() {
   ];
 }
 
-// ---------- Haushaltsbuch (seit 06.11.2026, nur auf dem Mac) ----------
-// Josefs Kontodaten verlassen den Mac nicht: Die Seite holt die fertige Monatsuebersicht direkt vom lokalen
-// Dienst (tv_dienst.py, GET /haushalt, nur 127.0.0.1). Auf dem Handy oder anderswo gibt es deshalb nichts zu sehen.
-const HAUSHALT_URL = "http://127.0.0.1:10204/haushalt";
-const HAUSHALT_LOKAL = "http://127.0.0.1:10204/dashboard/?demo#/haushalt";
-const LOKAL = location.hostname === "127.0.0.1";
+// ---------- Haushaltsbuch (seit 06.11.2026, verschluesselt auf GitHub seit 07.11.2026) ----------
+// Das Repo ist oeffentlich. haushaltsbuch.py legt deshalb nur haushalt.enc.json ab (AES-256-GCM, Schluessel per
+// PBKDF2-SHA256 aus Josefs Passwort). Entschluesselt wird hier im Browser; ohne Passwort ist nichts lesbar.
+// "Auf diesem Geraet merken" speichert den abgeleiteten Schluessel (nicht das Passwort) im localStorage.
+const HAUSHALT_DATEI = "haushalt.enc.json";
+const HAUSHALT_KEY = "jarvis-haushalt-schluessel";
+const b64bytes = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function haushaltSchluessel(passwort, paket) {
+  const roh = await crypto.subtle.importKey("raw", new TextEncoder().encode(passwort), "PBKDF2", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: b64bytes(paket.salz), iterations: paket.runden }, roh, 256));
+}
+
+async function haushaltEntschluesseln(paket, bytes) {
+  const key = await crypto.subtle.importKey("raw", bytes, "AES-GCM", false, ["decrypt"]);
+  const klar = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64bytes(paket.iv) }, key, b64bytes(paket.daten));
+  return JSON.parse(new TextDecoder().decode(klar));
+}
 
 async function loadHaushalt() {
   state.haushalt = { loading: true };
   try {
-    const r = await fetch(HAUSHALT_URL, { cache: "no-store" });
-    if (!r.ok) throw new Error(r.status === 404 ? "Noch keine Übersicht gebaut." : `Antwort ${r.status}`);
-    state.haushalt = { data: await r.json() };
+    const r = await fetch(`${HAUSHALT_DATEI}?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status === 404 ? "Noch keine verschlüsselten Zahlen hochgeladen." : `Antwort ${r.status}`);
+    const paket = await r.json();
+    let gemerkt = null;
+    try { gemerkt = JSON.parse(localStorage.getItem(HAUSHALT_KEY) || "null"); } catch {}
+    if (gemerkt && gemerkt.salz === paket.salz) {
+      try { state.haushalt = { data: await haushaltEntschluesseln(paket, b64bytes(gemerkt.k)) }; render(); return; }
+      catch { try { localStorage.removeItem(HAUSHALT_KEY); } catch {} }
+    }
+    state.haushalt = { paket };
   } catch (e) {
     state.haushalt = { error: e.message || String(e) };
   }
   render();
 }
 
+function haushaltLogin(hb) {
+  const pw = h("input", { type: "password", name: "password", autocomplete: "current-password", placeholder: "Passwort", required: true, "aria-label": "Haushaltsbuch-Passwort" });
+  const merken = h("input", { type: "checkbox", checked: true });
+  const err = h("div", { class: hb.falsch ? "notice err" : "hidden" }, "Passwort falsch.");
+  const btn = h("button", { class: "btn primary", type: "submit" }, "Öffnen");
+  const form = h("form", {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      btn.disabled = true; btn.textContent = "Entschlüssle …";
+      try {
+        const bytes = await haushaltSchluessel(pw.value, hb.paket);
+        const data = await haushaltEntschluesseln(hb.paket, bytes);
+        if (merken.checked) {
+          try { localStorage.setItem(HAUSHALT_KEY, JSON.stringify({ salz: hb.paket.salz, k: btoa(String.fromCharCode(...bytes)) })); } catch {}
+        }
+        state.haushalt = { data };
+      } catch {
+        state.haushalt = { paket: hb.paket, falsch: true };
+      }
+      render();
+    },
+  },
+    h("input", { type: "text", name: "username", autocomplete: "username", value: "Jarvis-Haushaltsbuch", class: "hidden", readonly: true, tabindex: "-1", "aria-hidden": "true" }),
+    pw, h("label", { class: "muted" }, merken, " Auf diesem Gerät merken"), btn, err);
+  setTimeout(() => pw.focus(), 0);
+  return h("div", { class: "panel" }, h("div", { class: "empty" },
+    h("p", {}, "Das Haushaltsbuch ist verschlüsselt. Mit deinem Passwort öffnen."), form));
+}
+
 function viewHaushalt() {
   const hb = state.haushalt;
   if (!hb) { loadHaushalt(); return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …")); }
   if (hb.loading) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …"));
-  if (hb.error) return h("div", { class: "panel" }, h("div", { class: "empty" },
-    h("p", {}, "Deine Kontodaten verlassen den Mac nicht. Safari lässt diese Seite deshalb nicht direkt an das Haushaltsbuch, es öffnet sich lokal vom Mac."),
-    h("p", {}, h("a", { class: "btn primary", href: HAUSHALT_LOKAL }, icon("wallet"), "Haushaltsbuch öffnen (nur am Mac)")),
-    h("p", { class: "muted" }, `Geht der Knopf nicht, bist du nicht am Mac oder der Mac-Dienst läuft nicht. (${hb.error})`)));
+  if (hb.error) return h("div", { class: "panel" }, h("div", { class: "empty" }, `Haushaltsbuch nicht verfügbar: ${hb.error}`));
+  if (hb.paket) return haushaltLogin(hb);
   const d = hb.data;
   const monate = d.monate || [];
   if (!monate.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Umsätze."));
