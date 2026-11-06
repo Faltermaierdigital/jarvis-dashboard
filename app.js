@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=35";
-import * as gh from "./github.js?v=35";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=36";
+import * as gh from "./github.js?v=36";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -139,7 +139,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=35");
+      const { buildDemo } = await import("./demo.js?v=36");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -434,7 +434,7 @@ function render() {
   }, icon(v.icon), v.label));
 
   const liveDot = state.error ? "red" : state.loading && !state.lastUpdate ? "amber" : "green";
-  const liveText = DEMO ? "DEMO-MODUS" : state.error ? "VERBINDUNGSFEHLER" : state.lastUpdate ? `LIVE · ${fTime.format(state.lastUpdate)}` : "LÄDT …";
+  const liveText = LOKAL ? "NUR AUF DIESEM MAC" : DEMO ? "DEMO-MODUS" : state.error ? "VERBINDUNGSFEHLER" : state.lastUpdate ? `LIVE · ${fTime.format(state.lastUpdate)}` : "LÄDT …";
 
   const body = [];
   if (state.error) body.push(h("div", { class: "notice err" }, `GitHub nicht erreichbar: ${state.error}`));
@@ -1458,6 +1458,8 @@ function viewDiktate() {
 // Josefs Kontodaten verlassen den Mac nicht: Die Seite holt die fertige Monatsuebersicht direkt vom lokalen
 // Dienst (tv_dienst.py, GET /haushalt, nur 127.0.0.1). Auf dem Handy oder anderswo gibt es deshalb nichts zu sehen.
 const HAUSHALT_URL = "http://127.0.0.1:10204/haushalt";
+const HAUSHALT_LOKAL = "http://127.0.0.1:10204/dashboard/?demo#/haushalt";
+const LOKAL = location.hostname === "127.0.0.1";
 
 async function loadHaushalt() {
   state.haushalt = { loading: true };
@@ -1476,9 +1478,9 @@ function viewHaushalt() {
   if (!hb) { loadHaushalt(); return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …")); }
   if (hb.loading) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Haushaltsbuch wird geladen …"));
   if (hb.error) return h("div", { class: "panel" }, h("div", { class: "empty" },
-    "Das Haushaltsbuch ist nur am Mac sichtbar, deine Kontodaten verlassen ihn nicht. ",
-    h("span", { class: "muted" }, `(${hb.error})`), " ",
-    h("button", { class: "link", onclick: () => { state.haushalt = null; render(); } }, "Neu laden", icon("refresh"))));
+    h("p", {}, "Deine Kontodaten verlassen den Mac nicht. Safari lässt diese Seite deshalb nicht direkt an das Haushaltsbuch, es öffnet sich lokal vom Mac."),
+    h("p", {}, h("a", { class: "btn primary", href: HAUSHALT_LOKAL }, icon("wallet"), "Haushaltsbuch öffnen (nur am Mac)")),
+    h("p", { class: "muted" }, `Geht der Knopf nicht, bist du nicht am Mac oder der Mac-Dienst läuft nicht. (${hb.error})`)));
   const d = hb.data;
   const monate = d.monate || [];
   if (!monate.length) return h("div", { class: "panel" }, h("div", { class: "empty" }, "Noch keine Umsätze."));
