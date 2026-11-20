@@ -1,7 +1,10 @@
 // Duenne Schicht ueber die GitHub REST API. Der Token lebt ausschliesslich in
 // dieser Modul-Variable (Arbeitsspeicher) - kein localStorage, kein Cookie.
 
-const API = "https://api.github.com";
+// Seit 20.11.2026 (GitHub-Ausstieg): vom Jarvis-Hub auf dem Mac ausgeliefert spricht das Dashboard
+// mit dessen nachgebauter API unter /api, auf GitHub Pages weiter mit api.github.com.
+export const HUB = !location.hostname.endsWith("github.io");
+const API = HUB ? location.origin + "/api" : "https://api.github.com";
 let token = null;
 
 export function setToken(t) { token = t; }

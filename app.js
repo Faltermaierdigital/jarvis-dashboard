@@ -1,5 +1,5 @@
-import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=38";
-import * as gh from "./github.js?v=38";
+import { OWNER, AGENTS, SCHANK_NOTES } from "./config.js?v=39";
+import * as gh from "./github.js?v=39";
 
 // Alle Inhalte werden per textContent / createElement gebaut, nie per
 // innerHTML: Absender und Betreffs stammen aus Spam-Mails und sind damit
@@ -139,7 +139,7 @@ async function load() {
   state.loading = true;
   try {
     if (DEMO) {
-      const { buildDemo } = await import("./demo.js?v=38");
+      const { buildDemo } = await import("./demo.js?v=39");
       const d = buildDemo(AGENTS);
       state.runs = d.runs;
       state.results = d.results;
@@ -361,7 +361,7 @@ function toast(text, err) {
 // ---------- Login ----------
 function renderLogin(message) {
   const root = document.getElementById("root");
-  const pw = h("input", { type: "password", name: "password", autocomplete: "current-password", placeholder: "github_pat_…", required: true, "aria-label": "GitHub-Token" });
+  const pw = h("input", { type: "password", name: "password", autocomplete: "current-password", placeholder: gh.HUB ? "Jarvis-Token" : "github_pat_…", required: true, "aria-label": "GitHub-Token" });
   const err = h("div", { class: message ? "notice err" : "hidden" }, message || "");
   const btn = h("button", { class: "btn primary", type: "submit" }, "Verbinden");
   const form = h("form", {
@@ -393,7 +393,7 @@ function renderLogin(message) {
     h("div", { class: "panel card" },
       logo("logo"),
       h("h1", {}, "JARVIS"),
-      h("p", {}, "Kontrollzentrum für alle Agents. Mit deinem GitHub-Token verbinden, der Passwortmanager füllt ihn aus."),
+      h("p", {}, gh.HUB ? "Kontrollzentrum für alle Agents, läuft auf dem Mac mini. Mit dem Jarvis-Token verbinden, der Passwortmanager füllt ihn aus." : "Kontrollzentrum für alle Agents. Mit deinem GitHub-Token verbinden, der Passwortmanager füllt ihn aus."),
       form,
       h("div", { class: "fine" }, "Der Token bleibt nur in diesem Tab, auch beim Neuladen. Beim Schließen des Tabs ist er weg. ",
         h("a", { href: "?demo" }, "Demo ansehen")))));
@@ -457,7 +457,7 @@ function render() {
       h("main", { class: "content" }, h("h1", { class: "page-title" }, view.label), body),
       h("footer", { class: "footer" }, h("div", { class: "line" },
         DEMO ? "Erfundene Beispieldaten · keine Verbindung zu GitHub" :
-          `Daten live von GitHub · Token nur in diesem Tab · aktualisiert automatisch${state.lastUpdate ? ` · zuletzt ${fTime.format(state.lastUpdate)}` : ""}`)))));
+          `Daten live ${gh.HUB ? "vom Mac mini" : "von GitHub"} · Token nur in diesem Tab · aktualisiert automatisch${state.lastUpdate ? ` · zuletzt ${fTime.format(state.lastUpdate)}` : ""}`)))));
 }
 
 // ---------- Bausteine ----------
